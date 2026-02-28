@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import {
     Activity, PieChart as PieChartIcon, BarChart2, TrendingUp,
-    Map as MapIcon, Network, Loader2, Plus, Sparkles, Info
+    Map as MapIcon, Network, Loader2, Plus, Sparkles, Info, Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
@@ -129,6 +129,36 @@ export default function Dashboard({ data, externalChartRequest }: DashboardProps
 
     const [chartTabs, setChartTabs] = useState<ChartConfig[]>(initialTabs);
     const [selectedIdx, setSelectedIdx] = useState(0);
+
+    const downloadReport = () => {
+        let content = `# DataSense Analysis Report\n\n`;
+        content += `## Document Name\n${data.filename}\n\n`;
+        content += `## Executive Summary\n${data.insights.summary}\n\n`;
+        if (data.column_meta && Object.keys(data.column_meta).length > 0) {
+            content += `## Detected Data Columns\n`;
+            for (const [col, info] of Object.entries(data.column_meta)) {
+                content += `- **${col}** (${info.type}): ${(info as any).unique_count || 0} unique values.`;
+                if (info.type === 'number') content += ` Min/Max: ${(info as any).min}/${(info as any).max}`;
+                content += `\n`;
+            }
+        }
+        content += `\n## Generated Chart Configurations\n`;
+        if (data.chart_configs) {
+            data.chart_configs.forEach(c => {
+                content += `- **${c.title}** (${c.type}): ${JSON.stringify(c)}\n`;
+            });
+        }
+
+        const blob = new Blob([content], { type: 'text/markdown' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `DataSense_Report_${data.filename.replace(/[^a-z0-9]/gi, '_')}.md`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
 
     // Knowledge Graph state
     const [graphNodes, setGraphNodes] = useState<GraphNode[]>([]);
@@ -407,10 +437,18 @@ export default function Dashboard({ data, externalChartRequest }: DashboardProps
         <div className="flex flex-col h-full p-5 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200">
             {/* Executive Summary */}
             <div className="mb-5">
-                <h2 className="text-xl font-bold text-slate-800 mb-2 flex items-center gap-2">
-                    <Sparkles size={18} className="text-orange-400" />
-                    Executive Summary
-                </h2>
+                <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                        <Sparkles size={18} className="text-orange-400" />
+                        Executive Summary
+                    </h2>
+                    <button
+                        onClick={downloadReport}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-orange-600 hover:bg-orange-50 hover:text-orange-700 rounded-lg text-sm font-semibold transition-colors duration-200 border border-slate-200 hover:border-orange-200 shadow-sm"
+                    >
+                        <Download size={14} /> Download Report
+                    </button>
+                </div>
                 <div className="bg-white border border-slate-200 p-4 rounded-2xl">
                     <p className="text-slate-700 leading-relaxed text-sm">{data.insights.summary}</p>
                 </div>

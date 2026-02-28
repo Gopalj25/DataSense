@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { UploadCloud, FileType, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import axios from 'axios';
 import type { InsightData } from '../App';
@@ -11,8 +11,27 @@ export default function FileUpload({ onSuccess }: FileUploadProps) {
     const [dragActive, setDragActive] = useState(false);
     const [file, setFile] = useState<File | null>(null);
     const [loading, setLoading] = useState(false);
+    const [loadingText, setLoadingText] = useState("Analyzing Data...");
     const [error, setError] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (!loading) return;
+        const texts = [
+            "Parsing file structure...",
+            "Extracting schema and column metadata...",
+            "AI is mapping relations...",
+            "Generating optimized visual configurations...",
+            "Finalizing your interactive dashboard..."
+        ];
+        let i = 0;
+        setLoadingText(texts[0]);
+        const interval = setInterval(() => {
+            i = (i + 1) % texts.length;
+            setLoadingText(texts[i]);
+        }, 3000);
+        return () => clearInterval(interval);
+    }, [loading]);
 
     const handleDrag = (e: React.DragEvent) => {
         e.preventDefault();
@@ -69,18 +88,18 @@ export default function FileUpload({ onSuccess }: FileUploadProps) {
     };
 
     return (
-        <div className="w-full max-w-2xl px-4">
-            <div className="text-center mb-8">
-                <h2 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-yellow-500 mb-4">
+        <div className="w-full max-w-5xl px-4 flex flex-col items-center justify-center my-auto min-h-[600px] animate-in fade-in zoom-in-95 duration-500">
+            <div className="text-center mb-10 w-full max-w-3xl">
+                <h2 className="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-yellow-500 mb-6 drop-shadow-sm">
                     Uncover Hidden Insights
                 </h2>
-                <p className="text-slate-600 text-lg">
+                <p className="text-slate-600 text-xl leading-relaxed">
                     Upload your data securely and let our AI Agent generate visual summaries and answer your questions instantly.
                 </p>
             </div>
 
             <div
-                className={`relative group flex flex-col items-center justify-center w-full h-80 rounded-3xl border-2 border-dashed transition-all duration-300 ${dragActive
+                className={`relative group flex flex-col items-center justify-center w-full h-96 md:h-[450px] rounded-3xl border-2 border-dashed transition-all duration-300 ${dragActive
                     ? "border-orange-500 bg-orange-100 scale-[1.02]"
                     : "border-slate-300 bg-white hover:border-orange-400 hover:bg-orange-50"
                     } shadow-lg`}
@@ -145,7 +164,7 @@ export default function FileUpload({ onSuccess }: FileUploadProps) {
                     {loading ? (
                         <>
                             <Loader2 size={24} className="animate-spin" />
-                            <span>Analyzing Data...</span>
+                            <span className="min-w-[280px] text-center">{loadingText}</span>
                             {/* Progress bar overlay animation */}
                             <div className="absolute inset-0 bg-white/20 animate-pulse" />
                         </>
