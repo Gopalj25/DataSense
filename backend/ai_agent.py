@@ -88,14 +88,29 @@ class AIAgent:
                 [Bar Chart, Line Chart, Pie Chart, Scatter Plot, Histogram, Box Plot, Heatmap, Knowledge Graph]
 
                 Rules:
-                - "Bar Chart" → if there are categorical + numeric columns (compare groups)
-                - "Line Chart" → if there is a time-series or ordered numeric progression
-                - "Pie Chart" → if one categorical + one numeric column shows composition/share
-                - "Scatter Plot" → if there are 2+ numeric columns showing correlation
-                - "Histogram" → if there is a single numeric column and the goal is to understand its distribution, frequency, or spread
-                - "Box Plot" → if there is one categorical column and one numeric column and the goal is to compare spread, median, or outliers across groups
-                - "Heatmap" → if there are 3 or more numeric columns and the goal is to understand relationships or correlations between all of them simultaneously
-                - "Knowledge Graph" → ALWAYS include for PDFs/text documents; good for any relational data
+                - "Bar Chart" → categorical x + numeric y, goal is comparing magnitudes across groups.
+                                AVOID if x-axis is time-based, has 20+ unique values, or values sum to 100%. (compare groups or show breakdowns)
+                - "Line Chart" → x-axis is a date, month, year, timestamp, or any ordered/sequential column.
+                                PREFER over Bar whenever time or progression is present, even if stored as string.
+                - "Pie Chart" → one categorical (2-8 unique values only) + one numeric that represents parts of a whole.
+                                AVOID if values don't sum meaningfully or if Bar Chart shows the comparison more clearly.
+                - "Scatter Plot" → if there are 2+ independent numeric columns where the goal is correlation or clustering.
+                                AVOID if either axis is an ID, index, or flag column disguised as numeric.
+                - "Histogram" → exactly one continuous numeric column, goal is distribution or frequency of values.
+                                AVOID on categorical, ID, or near-constant columns — they produce meaningless bins.
+                - "Box Plot" → one categorical grouping column + one numeric column, goal is spread or outlier comparison.
+                                AVOID if the categorical column has only 1 unique value or the numeric column barely varies.
+                - "Heatmap" → 3 or more numeric columns, goal is understanding correlations across all of them at once.
+                                AVOID if numeric columns are IDs or flags — correlation between those is meaningless.
+                - "Knowledge Graph" → always include for PDFs or text documents, and for any relational or hierarchical dataset.
+                                Can be combined with other chart types on mixed datasets.
+
+                Tie-breaking rules:
+                → if data has BOTH time AND categories, prefer Line Chart with color grouping over Bar Chart
+                → if unsure between Pie and Bar, choose Bar — it is more universally readable
+                → if unsure between Scatter and Line, check the x-axis: ordered/sequential = Line, independent numeric = Scatter
+                → never recommend more than 4 chart types total for a single dataset
+                → never recommend the same chart type twice
 
                 Return ONLY valid JSON (no markdown):
                 {{
