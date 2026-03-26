@@ -6,11 +6,13 @@ import {
 } from 'recharts';
 import {
     Activity, PieChart as PieChartIcon, BarChart2, TrendingUp,
-    Map as MapIcon, Network, Loader2, Plus, Sparkles, Info, Download
+    Map as MapIcon, Network, Loader2, Plus, Sparkles, Info, Download, Pencil
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import Plot from 'react-plotly.js';
+import ChartEditor from './ChartEditor';
+import type { EditorConfig } from './ChartEditor';
 
 interface DashboardProps {
     data: InsightData;
@@ -130,6 +132,7 @@ export default function Dashboard({ data, externalChartRequest }: DashboardProps
 
     const [chartTabs, setChartTabs] = useState<ChartConfig[]>(initialTabs);
     const [selectedIdx, setSelectedIdx] = useState(0);
+    const [isEditing, setIsEditing] = useState(false);
 
     const downloadReport = () => {
         let content = `# DataSense Analysis Report\n\n`;
@@ -492,6 +495,15 @@ export default function Dashboard({ data, externalChartRequest }: DashboardProps
                     <span className="text-xs text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full flex items-center gap-1">
                         <Info size={11} /> AI-selected columns · Ask in chat for more
                     </span>
+                    <button
+                        onClick={() => setIsEditing(prev => !prev)}
+                        className={`ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${isEditing
+                            ? 'bg-purple-600 text-white shadow-md'
+                            : 'bg-white text-slate-600 border border-slate-200 hover:bg-purple-50 hover:text-purple-600 hover:border-purple-200'}`}
+                    >
+                        <Pencil size={12} />
+                        {isEditing ? 'Close Editor' : 'Edit Chart'}
+                    </button>
                 </div>
 
                 {/* Dynamic Chart Tabs */}
@@ -553,6 +565,32 @@ export default function Dashboard({ data, externalChartRequest }: DashboardProps
                         </motion.div>
                     </AnimatePresence>
                 </div>
+
+                {/* Chart Editor Panel */}
+                <AnimatePresence>
+                    {isEditing && selectedConfig && (
+                        <ChartEditor
+                            key={selectedIdx}
+                            fileId={data.file_id}
+                            aiConfig={selectedConfig as EditorConfig}
+                            columnMeta={data.column_meta || {}}
+                            currentPlotlyJson={selectedConfig.plotly_json}
+                            onApply={(newJson, appliedCfg) => {
+                                setChartTabs(prev => {
+                                    const updated = [...prev];
+                                    updated[selectedIdx] = {
+                                        ...updated[selectedIdx],
+                                        ...appliedCfg,
+                                        plotly_json: newJson,
+                                    };
+                                    return updated;
+                                });
+                                setIsEditing(false);
+                            }}
+                            onClose={() => setIsEditing(false)}
+                        />
+                    )}
+                </AnimatePresence>
             </div>
         </div>
     );

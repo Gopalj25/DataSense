@@ -1,8 +1,10 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Optional, List
 import uuid
 import pandas as pd
+import plotly.express as px
 import io
 import json
 
@@ -206,3 +208,65 @@ class GraphRequest(BaseModel):
 async def get_graph_data(request: GraphRequest):
     graph_data = AIAgent.generate_graph_data(request.content_summary)
     return graph_data
+
+
+# ─────────────────────────────────────────────────────────────
+# Chart Editor — deterministic re-render (zero LLM calls)
+# ─────────────────────────────────────────────────────────────
+
+_DEFAULT_PLOTLY_SEQ = list(px.colors.qualitative.Plotly)
+
+def _patch_palette(primary_hex: str):
+    """Temporarily override Plotly's default colour sequence so the next chart
+    uses the user-chosen primary colour."""
+    px.defaults.color_discrete_sequence = [primary_hex] + _DEFAULT_PLOTLY_SEQ[1:]
+
+def _reset_palette():
+    px.defaults.color_discrete_sequence = _DEFAULT_PLOTLY_SEQ
+
+
+class RenderRequest(BaseModel):
+    file_id:     str
+    chart_type:  str
+    title:       str
+    x_key:       Optional[str] = None
+    y_keys:      Optional[List[str]] = []
+    label_key:   Optional[str] = None
+    value_key:   Optional[str] = None
+    tooltip_key: Optional[str] = None
+    nbins:       Optional[int] = 30
+    columns:     Optional[List[str]] = None
+    color:       Optional[str] = None
+
+
+@app.post("/api/render")
+def render_chart(req: RenderRequest):
+    """Re-render a chart with user-chosen config. Pure logic, zero AI."""
+    df = GLOBAL_DFS.get(req.file_id)
+    if df is None:
+        raise HTTPException(status_code=404, detail="DataFrame not found. Re-upload the file.")
+
+    if req.color:
+        _patch_palette(req.color)
+
+    CHART_DISPATCH = {
+        "Bar Chart":    lambda: Visualizer.generate_bar_chart(df, req.title, req.x_key, req.y_keys or []),
+        "Line Chart":   lambda: Visualizer.generate_line_chart(df, req.title, req.x_key, req.y_keys or []),
+        "Pie Chart":    lambda: Visualizer.generate_pie_chart(df, req.title, req.label_key, req.value_key),
+        "Scatter Plot": lambda: Visualizer.generate_scatter_plot(df, req.title, req.x_key, (req.y_keys[0] if req.y_keys else None), req.tooltip_key),
+        "Histogram":    lambda: Visualizer.generate_histogram(df, req.title, req.x_key, req.nbins or 30),
+        "Box Plot":     lambda: Visualizer.generate_box_plot(df, req.title, req.x_key, (req.y_keys[0] if req.y_keys else None)),
+        "Heatmap":      lambda: Visualizer.generate_heatmap(df, req.title, req.columns),
+    }
+
+    handler = CHART_DISPATCH.get(req.chart_type)
+    if not handler:
+        _reset_palette()
+        raise HTTPException(status_code=400, detail=f"Unknown chart type: {req.chart_type}")
+
+    try:
+        fig_json = handler()
+    finally:
+        _reset_palette()
+
+    return {"plotly_json": fig_json}
