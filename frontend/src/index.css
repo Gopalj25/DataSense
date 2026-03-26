@@ -61,20 +61,36 @@
 
 /* ─── Light Theme ─────────────────────────────────────── */
 [data-theme="light"] {
-  --bg-canvas:    #F7F7F8;
+  --bg-canvas:    #F5F5F7;
   --bg-base:      #FFFFFF;
-  --bg-surface:   #F4F4F6;
+  --bg-surface:   #EFEFF2;
   --bg-elevated:  #FFFFFF;
-  --bg-overlay:   #EBEBED;
-  --bg-inset:     #F0F0F2;
-  --border-dim:     rgba(0,0,0,0.04);
-  --border:         rgba(0,0,0,0.08);
-  --border-strong:  rgba(0,0,0,0.14);
-  --border-accent:  rgba(99,102,241,0.40);
-  --text-primary:   #111113;
-  --text-secondary: #52525B;
-  --text-muted:     #A1A1AA;
+  --bg-overlay:   #E4E4E9;
+  --bg-inset:     #EAEAEE;
+  --border-dim:     rgba(0,0,0,0.06);
+  --border:         rgba(0,0,0,0.12);
+  --border-strong:  rgba(0,0,0,0.22);
+  --border-accent:  rgba(79,70,229,0.50);
+  --text-primary:   #09090B;
+  --text-secondary: #3F3F46;
+  --text-muted:     #71717A;
   --text-inverse:   #FFFFFF;
+  --accent:         #4F46E5;
+  --accent-hover:   #6366F1;
+  --accent-dim:     rgba(79,70,229,0.08);
+  --accent-text:    #4338CA;
+  --success:        #059669;
+  --success-dim:    rgba(5,150,105,0.08);
+  --warning:        #D97706;
+  --warning-dim:    rgba(217,119,6,0.08);
+  --danger:         #DC2626;
+  --danger-dim:     rgba(220,38,38,0.08);
+  --chart-1: #6366F1;
+  --chart-2: #059669;
+  --chart-3: #EA580C;
+  --chart-4: #DB2777;
+  --chart-5: #0284C7;
+  --chart-6: #7C3AED;
   color-scheme: light;
 }
 

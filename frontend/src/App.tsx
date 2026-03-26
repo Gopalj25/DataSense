@@ -105,6 +105,15 @@ function App() {
               style={{ color: 'var(--text-muted)' }}
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-elevated)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              onClick={() => {
+                const gd = document.querySelector('.js-plotly-plot') as any;
+                if (gd && (window as any).Plotly) {
+                  (window as any).Plotly.downloadImage(gd, {
+                    format: 'png', width: 1200, height: 700,
+                    filename: `${insightData.filename}_datasense`
+                  });
+                }
+              }}
             >
               <Download size={16} />
             </button>
