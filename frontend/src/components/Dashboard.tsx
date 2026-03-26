@@ -6,41 +6,34 @@ import {
 } from 'recharts';
 import {
     Activity, PieChart as PieChartIcon, BarChart2, TrendingUp,
-    Map as MapIcon, Network, Loader2, Sparkles, Info, Table as TableIcon, AlertCircle
+    Map as MapIcon, Network, Loader2, Plus, Sparkles, Info, Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
-import DataCleaner from './DataCleaner';
+import Plot from 'react-plotly.js';
 
 interface DashboardProps {
     data: InsightData;
     externalChartRequest?: ChartRequest | null;
 }
 
-interface DashboardState {
-    loading: boolean;
-    chartTransitioning: boolean;
-    error: string | null;
-}
-
-const COLORS = ['#f97316', '#0ea5e9', '#10b981', '#e11d48', '#f59e0b', '#6366f1', '#14b8a6', '#ef4444'];
+const COLORS = ['#8b5cf6', '#3b82f6', '#ec4899', '#14b8a6', '#f59e0b', '#ef4444', '#84cc16', '#f97316'];
 
 const tooltipStyle = {
     contentStyle: {
-        backgroundColor: 'rgba(15, 23, 42, 0.9)',
-        border: '1px solid rgba(148, 163, 184, 0.25)',
-        borderRadius: '12px',
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        border: '1px solid rgba(0,0,0,0.1)',
+        borderRadius: '10px',
         backdropFilter: 'blur(10px)',
-        color: '#e2e8f0',
+        color: '#1e293b',
         fontSize: '13px'
     },
-    itemStyle: { color: '#fbbf24' },
-    labelStyle: { color: '#cbd5e1' }
+    itemStyle: { color: '#f97316' }
 };
 
 const axisStyle = {
-    stroke: 'rgba(148,163,184,0.5)',
-    tick: { fill: 'rgba(71,85,105,1)', fontSize: 11 }
+    stroke: 'rgba(0,0,0,0.1)',
+    tick: { fill: 'rgba(0,0,0,0.5)', fontSize: 11 }
 };
 
 function prepareRows(raw: any[], limit = 30): any[] {
@@ -135,27 +128,44 @@ export default function Dashboard({ data, externalChartRequest }: DashboardProps
         ? data.chart_configs
         : (data.insights.suggested_charts || []).map(type => ({ type, title: type }));
 
-    // Main tab state (Summary, Visualizations, Data Quality, Data Preview)
-    const [mainTab, setMainTab] = useState<'summary' | 'visualizations' | 'quality' | 'preview'>('summary');
-    
     const [chartTabs, setChartTabs] = useState<ChartConfig[]>(initialTabs);
     const [selectedIdx, setSelectedIdx] = useState(0);
-    
-    // Enhanced Dashboard State
-    const [dashboardState, setDashboardState] = useState<DashboardState>({
-        loading: false,
-        chartTransitioning: false,
-        error: null
-    });
+
+    const downloadReport = () => {
+        let content = `# DataSense Analysis Report\n\n`;
+        content += `## Document Name\n${data.filename}\n\n`;
+        content += `## Executive Summary\n${data.insights.summary}\n\n`;
+        if (data.column_meta && Object.keys(data.column_meta).length > 0) {
+            content += `## Detected Data Columns\n`;
+            for (const [col, info] of Object.entries(data.column_meta)) {
+                content += `- **${col}** (${info.type}): ${(info as any).unique_count || 0} unique values.`;
+                if (info.type === 'number') content += ` Min/Max: ${(info as any).min}/${(info as any).max}`;
+                content += `\n`;
+            }
+        }
+        content += `\n## Generated Chart Configurations\n`;
+        if (data.chart_configs) {
+            data.chart_configs.forEach(c => {
+                content += `- **${c.title}** (${c.type}): ${JSON.stringify(c)}\n`;
+            });
+        }
+
+        const blob = new Blob([content], { type: 'text/markdown' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `DataSense_Report_${data.filename.replace(/[^a-z0-9]/gi, '_')}.md`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
 
     // Knowledge Graph state
     const [graphNodes, setGraphNodes] = useState<GraphNode[]>([]);
     const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([]);
     const [graphLoading, setGraphLoading] = useState(false);
     const [graphFetched, setGraphFetched] = useState(false);
-
-    // Data Cleaner state
-    const [currentData, setCurrentData] = useState<any[]>(data.original_data || []);
 
     // Ref to track the last processed request timestamp
     const lastProcessedTs = useRef(0);
@@ -185,16 +195,7 @@ export default function Dashboard({ data, externalChartRequest }: DashboardProps
         return { type: chartTypeName, title: chartTypeName };
     };
 
-    // Handle chart tab selection with loading state
-    const handleChartSelection = (idx: number) => {
-        if (idx === selectedIdx || dashboardState.chartTransitioning) return;
-        
-        setDashboardState(prev => ({ ...prev, chartTransitioning: true }));
-        setTimeout(() => {
-            setSelectedIdx(idx);
-            setDashboardState(prev => ({ ...prev, chartTransitioning: false }));
-        }, 200);
-    };
+    // Handle chart request from chat — uses ref to avoid stale closure issues
     useEffect(() => {
         if (!externalChartRequest) return;
         if (externalChartRequest.ts <= lastProcessedTs.current) return; // already processed
@@ -209,24 +210,20 @@ export default function Dashboard({ data, externalChartRequest }: DashboardProps
             );
 
             if (existsAt >= 0) {
-                // Tab exists — switch with loading state
-                setDashboardState(prev => ({ ...prev, chartTransitioning: true }));
+                // Tab exists — just switch to it (use setTimeout to avoid batching issues)
                 setTimeout(() => {
                     setSelectedIdx(existsAt);
                     chartAreaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    setDashboardState(prev => ({ ...prev, chartTransitioning: false }));
-                }, 300);
+                }, 50);
                 return prevTabs; // no change
             } else {
-                // New tab — add with loading animation
+                // New tab — add it
                 const newConfig = autoConfigForType(incoming);
                 const updated = [...prevTabs, newConfig];
-                setDashboardState(prev => ({ ...prev, chartTransitioning: true }));
                 setTimeout(() => {
                     setSelectedIdx(updated.length - 1);
                     chartAreaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    setDashboardState(prev => ({ ...prev, chartTransitioning: false }));
-                }, 300);
+                }, 50);
                 return updated;
             }
         });
@@ -236,7 +233,6 @@ export default function Dashboard({ data, externalChartRequest }: DashboardProps
     const chartType = selectedConfig?.type?.toLowerCase() || '';
 
     const rawRows = useMemo(() => prepareRows(data.original_data || []), [data.original_data]);
-
 
     // Fetch Knowledge Graph once when needed
     useEffect(() => {
@@ -277,6 +273,36 @@ export default function Dashboard({ data, externalChartRequest }: DashboardProps
     const renderChart = () => {
         const cfg = selectedConfig;
         if (!cfg) return null;
+
+        // 1. Prefer Backend Plotly JSON if available
+        if (cfg.plotly_json) {
+            try {
+                const parsed = JSON.parse(cfg.plotly_json);
+                if (parsed.error) {
+                    return (
+                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-2">
+                            <Info size={40} className="text-red-400 opacity-60" />
+                            <p className="text-sm font-semibold text-red-500">Backend Plotly Error</p>
+                            <p className="text-xs text-slate-500 text-center px-6">{parsed.error}</p>
+                        </div>
+                    );
+                }
+                return (
+                    <div className="w-full h-full">
+                        <Plot
+                            data={parsed.data}
+                            layout={{ ...parsed.layout, autosize: true }}
+                            useResizeHandler={true}
+                            style={{ width: '100%', height: '100%' }}
+                            config={{ responsive: true, displayModeBar: false }}
+                        />
+                    </div>
+                );
+            } catch (err) {
+                console.error("Failed to parse plotly json", err);
+            }
+        }
+
         const type = cfg.type.toLowerCase();
 
         // Bar Chart
@@ -439,203 +465,95 @@ export default function Dashboard({ data, externalChartRequest }: DashboardProps
     };
 
     return (
-        <div className="relative flex flex-col h-full overflow-hidden rounded-3xl border border-slate-200/70 bg-gradient-to-b from-orange-50/40 via-amber-50/30 to-white">
-            <div className="pointer-events-none absolute -top-16 -right-14 h-52 w-52 rounded-full bg-orange-300/25 blur-3xl" />
-            <div className="pointer-events-none absolute -bottom-12 -left-8 h-44 w-44 rounded-full bg-sky-300/20 blur-3xl" />
+        <div className="flex flex-col h-full p-5 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200">
+            {/* Executive Summary */}
+            <div className="mb-5">
+                <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                        <Sparkles size={18} className="text-orange-400" />
+                        Executive Summary
+                    </h2>
+                    <button
+                        onClick={downloadReport}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-orange-600 hover:bg-orange-50 hover:text-orange-700 rounded-lg text-sm font-semibold transition-colors duration-200 border border-slate-200 hover:border-orange-200 shadow-sm"
+                    >
+                        <Download size={14} /> Download Report
+                    </button>
+                </div>
+                <div className="bg-white border border-slate-200 p-4 rounded-2xl">
+                    <p className="text-slate-700 leading-relaxed text-sm">{data.insights.summary}</p>
+                </div>
+            </div>
 
-            {/* MAIN TABS */}
-            <div className="relative z-10 border-b border-slate-200/50 bg-white/60 backdrop-blur-sm sticky top-0">
-                <div className="flex items-center gap-0">
-                    {[
-                        { id: 'summary', label: 'Summary', icon: Sparkles },
-                        { id: 'visualizations', label: 'Visualizations', icon: BarChart2 },
-                        { id: 'quality', label: 'Data Quality', icon: AlertCircle },
-                        { id: 'preview', label: 'Data', icon: TableIcon }
-                    ].map(tab => {
-                        const isActive = mainTab === tab.id;
-                        const Icon = tab.icon;
+            {/* Visualizations */}
+            <div className="flex flex-col">
+                <div className="flex items-center gap-3 mb-3" ref={chartAreaRef}>
+                    <h3 className="text-base font-semibold text-slate-800">Visualizations</h3>
+                    <span className="text-xs text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Info size={11} /> AI-selected columns · Ask in chat for more
+                    </span>
+                </div>
+
+                {/* Dynamic Chart Tabs */}
+                <div className="flex flex-wrap gap-2 mb-4">
+                    {chartTabs.map((cfg, idx) => {
+                        const isActive = idx === selectedIdx;
+                        const isNew = idx >= (data.chart_configs?.length || initialTabs.length);
                         return (
                             <button
-                                key={tab.id}
-                                onClick={() => setMainTab(tab.id as typeof mainTab)}
-                                className={`relative px-4 py-3 flex items-center gap-2 text-sm font-medium transition-all duration-200 whitespace-nowrap flex-1 lg:flex-none ${
-                                    isActive
-                                        ? 'text-orange-600 bg-orange-50'
-                                        : 'text-slate-600 hover:text-orange-500'
-                                }`}
+                                key={`${cfg.type}-${idx}`}
+                                onClick={() => setSelectedIdx(idx)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-all duration-250 ${isActive
+                                    ? 'bg-orange-500 text-white shadow-md'
+                                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50 hover:text-orange-600 hover:border-orange-200'
+                                    }`}
                             >
-                                <Icon size={16} />
-                                <span className="hidden sm:inline">{tab.label}</span>
-                                {isActive && (
-                                    <motion.div
-                                        layoutId="tab-underline"
-                                        className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-orange-500 to-amber-500"
-                                    />
+                                {getIcon(cfg.type)}
+                                {cfg.title || cfg.type}
+                                {isNew && (
+                                    <span className="ml-0.5 text-[10px] px-1.5 py-0.5 rounded bg-fuchsia-500/25 text-fuchsia-300 border border-fuchsia-500/30">
+                                        NEW
+                                    </span>
                                 )}
                             </button>
                         );
                     })}
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs text-slate-500 border border-dashed border-slate-200 cursor-default">
+                        <Plus size={12} /> Ask AI for more
+                    </div>
+                </div>
+
+                {/* Chart description */}
+                {selectedConfig?.description && (
+                    <p className="text-xs text-slate-500 mb-3 italic">{selectedConfig.description}</p>
+                )}
+
+                {/* Chart Canvas — fixed height for Recharts */}
+                <div className="h-[420px] bg-slate-50 border border-slate-200 rounded-2xl p-4 relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-yellow-500/5 pointer-events-none rounded-2xl" />
+                    <AnimatePresence mode="wait">
+                        <motion.div
+                            key={`${selectedIdx}-${selectedConfig?.type}`}
+                            initial={{ opacity: 0, y: 12 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -12 }}
+                            transition={{ duration: 0.22 }}
+                            className="w-full h-[388px] relative z-10"
+                        >
+                            {rawRows.length === 0 && !chartType.includes('graph') && !chartType.includes('knowledge')
+                                ? (
+                                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-500">
+                                        <Activity size={48} className="mb-3 opacity-40" />
+                                        <p className="text-sm">No tabular data to render for this file type.</p>
+                                        <p className="text-xs text-slate-500 mt-1">Try a Knowledge Graph or ask a question in chat.</p>
+                                    </div>
+                                )
+                                : renderChart()
+                            }
+                        </motion.div>
+                    </AnimatePresence>
                 </div>
             </div>
-
-            {/* TAB CONTENT */}
-            <div className="relative z-10 flex-1 overflow-y-auto p-4 md:p-6 scrollbar-hide">
-                <AnimatePresence mode="wait">
-                    {/* SUMMARY TAB */}
-                    {mainTab === 'summary' && (
-                        <motion.div
-                            key="summary"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            transition={{ duration: 0.2 }}
-                            className="space-y-4"
-                        >
-                            <div className="rounded-2xl border border-orange-200/60 bg-white/95 p-5 shadow-sm">
-                                <div className="flex items-start gap-3 mb-4">
-                                    <Sparkles size={20} className="text-orange-500 flex-shrink-0 mt-0.5" />
-                                    <div className="flex-1">
-                                        <h3 className="font-semibold text-slate-900">AI Summary</h3>
-                                        <p className="text-xs text-slate-500 mt-0.5">Insights powered by AI</p>
-                                    </div>
-                                </div>
-                                <p className="text-sm text-slate-700 leading-relaxed">{data.insights.summary}</p>
-                            </div>
-
-                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                                <MetricCard label="Rows" value={prepareRows(data.original_data || []).length.toLocaleString()} />
-                                <MetricCard label="Columns" value={(Object.keys(data.original_data?.[0] || {}) || []).length.toString()} />
-                                <MetricCard label="Numeric" value={Object.keys(data.original_data?.[0] || {}).filter(k => typeof data.original_data?.[0]?.[k] === 'number').length.toString()} />
-                                <MetricCard label="Charts" value={chartTabs.length.toString()} />
-                            </div>
-                        </motion.div>
-                    )}
-
-                    {/* VISUALIZATIONS TAB */}
-                    {mainTab === 'visualizations' && (
-                        <motion.div
-                            key="visualizations"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            transition={{ duration: 0.2 }}
-                            className="space-y-4"
-                        >
-                            {/* Chart Tabs */}
-                            <div className="flex flex-wrap gap-2 pb-3 overflow-x-auto scrollbar-hide">
-                                {chartTabs.map((cfg, idx) => {
-                                    const isActive = idx === selectedIdx;
-                                    const isNew = idx >= (data.chart_configs?.length || initialTabs.length);
-                                    return (
-                                        <motion.button
-                                            key={`${cfg.type}-${idx}`}
-                                            whileHover={{ y: -1 }}
-                                            whileTap={{ scale: 0.97 }}
-                                            onClick={() => handleChartSelection(idx)}
-                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all duration-200 flex-shrink-0 ${isActive
-                                                ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md'
-                                                : 'bg-white/80 text-slate-600 border border-slate-200 hover:border-orange-300'
-                                                }`}
-                                        >
-                                            {getIcon(cfg.type, 14)}
-                                            <span>{cfg.title || cfg.type}</span>
-                                            {isNew && <span className="text-[9px] bg-red-500 px-1 rounded text-white">NEW</span>}
-                                        </motion.button>
-                                    );
-                                })}
-                            </div>
-
-                            {/* Chart Display */}
-                            <div className="rounded-2xl border border-slate-200 bg-white/95 p-4 overflow-auto" style={{ height: 'calc(100vh - 350px)', maxHeight: 500 }}>
-                                <AnimatePresence mode="wait">
-                                    <motion.div
-                                        key={`${selectedIdx}-${selectedConfig?.type}`}
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        exit={{ opacity: 0 }}
-                                        transition={{ duration: 0.15 }}
-                                        className="w-full h-full"
-                                    >
-                                        {renderChart()}
-                                    </motion.div>
-                                </AnimatePresence>
-                                {dashboardState.chartTransitioning && (
-                                    <div className="absolute inset-0 bg-white/50 flex items-center justify-center rounded-2xl">
-                                        <Loader2 size={20} className="animate-spin text-orange-500" />
-                                    </div>
-                                )}
-                            </div>
-                        </motion.div>
-                    )}
-
-                    {/* DATA QUALITY TAB */}
-                    {mainTab === 'quality' && (
-                        <motion.div
-                            key="quality"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            transition={{ duration: 0.2 }}
-                        >
-                            <DataCleaner
-                                data={currentData}
-                                onCleaningComplete={(cleanedData) => {
-                                    setCurrentData(cleanedData);
-                                }}
-                            />
-                        </motion.div>
-                    )}
-
-                    {/* DATA PREVIEW TAB */}
-                    {mainTab === 'preview' && (
-                        <motion.div
-                            key="preview"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            transition={{ duration: 0.2 }}
-                            className="space-y-3"
-                        >
-                            <div className="rounded-2xl border border-slate-200 bg-white/95 overflow-hidden">
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-sm">
-                                        <thead className="bg-slate-50 sticky top-0">
-                                            <tr>
-                                                {Object.keys(currentData[0] || {}).map(col => (
-                                                    <th key={col} className="px-3 py-2 text-left text-xs font-semibold text-slate-700 whitesp ace-nowrap">
-                                                        {col}
-                                                    </th>
-                                                ))}
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                            {currentData.slice(0, 20).map((row, i) => (
-                                                <tr key={i} className="hover:bg-orange-50/30">
-                                                    {Object.values(row).map((val: any, j) => (
-                                                        <td key={j} className="px-3 py-2 text-xs text-slate-700 max-w-[200px] truncate">
-                                                            {typeof val === 'number' ? val.toFixed(2) : String(val).slice(0, 50)}
-                                                        </td>
-                                                    ))}
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            <p className="text-xs text-slate-500 text-center">Showing {Math.min(20, currentData.length)} of {currentData.length} rows</p>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-            </div>
-        </div>
-    );
-}
-
-function MetricCard({ label, value }: { label: string; value: string }) {
-    return (
-        <div className="rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50 px-3 py-2.5">
-            <p className="text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
-            <p className="text-lg font-semibold text-slate-800 leading-tight">{value}</p>
         </div>
     );
 }

@@ -2,8 +2,6 @@ import { useState } from 'react';
 import FileUpload from './components/FileUpload';
 import Dashboard from './components/Dashboard';
 import Chat from './components/Chat';
-import DashboardManager from './components/DashboardManager';
-import ExportPanel from './components/ExportPanel';
 import { Database } from 'lucide-react';
 
 export type ChartConfig = {
@@ -87,41 +85,15 @@ function App() {
               <Dashboard data={insightData} externalChartRequest={chartRequest} />
             </div>
 
-            {/* Bottom Row: Chat + Dashboard Manager */}
-            <div className="flex gap-6 h-[400px] shrink-0 overflow-hidden">
-              {/* Chat Panel */}
-              <div className="flex-1 bg-white/80 backdrop-blur-xl border border-slate-200 rounded-3xl shadow-xl overflow-hidden shadow-slate-200/50">
-                <Chat
-                  fileId={insightData.file_id}
-                  filename={insightData.filename}
-                  contentSummary={insightData.content_summary}
-                  columnMeta={insightData.column_meta}
-                  onChartRequested={handleChartRequested}
-                />
-              </div>
-
-              {/* Dashboard Manager & Export Panel */}
-              <div className="flex gap-4 w-[640px]">
-                {/* Dashboard Manager */}
-                <div className="flex-1 bg-white/80 backdrop-blur-xl border border-slate-200 rounded-3xl shadow-xl overflow-auto shadow-slate-200/50">
-                  <div className="p-4">
-                    <DashboardManager
-                      insightData={insightData}
-                      onDashboardLoaded={(data) => {
-                        setInsightData(data);
-                        setChartRequest(null);
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* Export Panel */}
-                <div className="flex-1 bg-white/80 backdrop-blur-xl border border-slate-200 rounded-3xl shadow-xl overflow-auto shadow-slate-200/50">
-                  <div className="p-4">
-                    <ExportPanel insightData={insightData} />
-                  </div>
-                </div>
-              </div>
+            {/* Bottom Panel: Chat */}
+            <div className="h-[400px] shrink-0 bg-white/80 backdrop-blur-xl border border-slate-200 rounded-3xl shadow-xl overflow-hidden shadow-slate-200/50">
+              <Chat
+                fileId={insightData.file_id}
+                filename={insightData.filename}
+                columnMeta={insightData.column_meta}
+                contentSummary={insightData.content_summary}
+                onChartRequested={handleChartRequested}
+              />
             </div>
           </div>
         )}

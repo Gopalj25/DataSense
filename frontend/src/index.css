@@ -1,14 +1,5 @@
 @import "tailwindcss";
-
-/* Hide scrollbars while keeping functionality */
-.scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;
-}
+@plugin "@tailwindcss/typography";
 
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
@@ -19,16 +10,10 @@
   background-color: #f8fafc;
 }
 
-html,
-body,
-#root {
-  width: 100%;
-  min-height: 100%;
-}
-
 body {
   margin: 0;
-  display: block;
+  display: flex;
+  place-items: center;
   min-width: 320px;
   min-height: 100vh;
 }
