@@ -306,6 +306,104 @@ class AIAgent:
             return f"Error: {str(e)}"
 
     # ─────────────────────────────────────────────────────────────
+    # AGENT 3B — Smart chat: AI generates pandas intent, backend
+    #            executes on full DataFrame, AI narrates results.
+    # ─────────────────────────────────────────────────────────────
+    @staticmethod
+    def generate_data_query(question: str, column_meta: dict, parsed_text_preview: str, previous_history: list = None) -> dict:
+        """
+        Stage 1 of smart chat: Ask Gemini to translate user question into
+        a pandas operation JSON, rather than trying to answer from sample data.
+        Returns: { "operation": str, "params": dict, "narrative_hint": str }
+        """
+        if not api_key or api_key == "your_api_key_here":
+            return {"operation": "passthrough", "params": {}, "narrative_hint": ""}
+
+        try:
+            model = _get_model()
+            cols_info = json.dumps(column_meta, indent=2)
+            history_text = "\n".join([
+                f"User: {msg['user']}\nAgent: {msg['agent']}"
+                for msg in (previous_history or [])
+            ])
+            prompt = f"""
+You are a data query planner. The user has a DataFrame with these columns:
+{cols_info}
+
+Data preview:
+{parsed_text_preview[:3000]}
+
+Conversation history:
+{history_text}
+
+User question: "{question}"
+
+If the user asks to CREATE, SHOW, GENERATE, or DISPLAY a visualization:
+Return: {{"operation": "chart", "params": {{}}, "narrative_hint": ""}}
+
+Otherwise, decide which pandas operation best answers this question.
+Pick ONE operation from:
+- "value_counts": count unique values in a column. params: {{"column": "col_name", "top_n": 10}}
+- "describe": basic stats for a numeric column. params: {{"column": "col_name"}}
+- "max_row": find row(s) with max value in a column. params: {{"column": "col_name", "top_n": 5}}
+- "min_row": find row(s) with min value in a column. params: {{"column": "col_name", "top_n": 5}}
+- "filter": filter rows matching condition. params: {{"column": "col_name", "operator": "==/>/</>=/<=/!=/contains", "value": "...", "top_n": 10}}
+- "correlation": correlation between two numeric columns. params: {{"col_a": "...", "col_b": "..."}}
+- "group_agg": group by column and aggregate. params: {{"group_by": "col", "agg_col": "col", "agg_func": "sum/mean/count/max/min", "top_n": 10}}
+- "nunique": count unique values. params: {{"column": "col_name"}}
+- "null_check": check null counts. params: {{"column": "col_name"}}  (use "__all__" for all columns)
+- "head": show first N rows. params: {{"n": 10}}
+- "sample": show random N rows. params: {{"n": 5}}
+- "summary": general summary question that can be answered from column metadata. params: {{}}
+
+Also include a "narrative_hint" — a short instruction for how to phrase the answer to the user.
+
+Return ONLY valid JSON (no markdown):
+{{"operation": "...", "params": {{...}}, "narrative_hint": "..."}}
+"""
+            response = model.generate_content(prompt)
+            return json.loads(_clean_json(response.text))
+        except Exception:
+            return {"operation": "passthrough", "params": {}, "narrative_hint": ""}
+
+    @staticmethod
+    def narrate_result(question: str, operation: str, result_text: str, narrative_hint: str, previous_history: list = None) -> str:
+        """
+        Stage 2 of smart chat: Given the actual query result from the full DataFrame,
+        ask Gemini to format a nice human-readable answer.
+        """
+        if not api_key or api_key == "your_api_key_here":
+            return result_text
+        try:
+            model = _get_model()
+            history_text = "\n".join([
+                f"User: {msg['user']}\nAgent: {msg['agent']}"
+                for msg in (previous_history or [])
+            ])
+            prompt = f"""
+You are a data analyst. The user asked: "{question}"
+
+The system executed a query on the FULL dataset and got this result:
+{result_text[:6000]}
+
+Hint: {narrative_hint}
+
+Conversation history:
+{history_text}
+
+Rules:
+1. Present the result clearly using markdown (tables, bullet points, bold).
+2. Answer based ONLY on the provided result data — this is from the COMPLETE dataset, not a sample.
+3. Be concise and insightful. Add a one-sentence observation if relevant.
+4. Never output code. Never say you only have sample data — you have the full result.
+5. If the user asked for a visualization, start with <CHART: ChartType> tag (Bar Chart, Line Chart, Pie Chart, Scatter Plot, Knowledge Graph).
+"""
+            response = model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            return result_text
+
+    # ─────────────────────────────────────────────────────────────
     # Legacy method — kept for backward compatibility
     # ─────────────────────────────────────────────────────────────
     @staticmethod

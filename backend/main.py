@@ -136,25 +136,174 @@ class ChatRequest(BaseModel):
 
 @app.post("/api/chat")
 async def chat_with_data(request: ChatRequest):
-    # Ask Gemini to answer the question, potentially outputting a <CHART: Type> tag
-    response_text = AIAgent.chat_with_data(
-        parsed_text=request.content_summary,
+    """
+    Smart hybrid chat:
+    1. Ask Gemini to translate user question into a pandas operation
+    2. Execute the pandas operation on the FULL cached DataFrame
+    3. Ask Gemini to narrate the real results
+    Falls back to original method for PDFs / when DataFrame is unavailable.
+    """
+    df = GLOBAL_DFS.get(request.file_id)
+
+    # ── Fallback for PDFs or missing DataFrames → use original method ──
+    if df is None:
+        response_text = AIAgent.chat_with_data(
+            parsed_text=request.content_summary,
+            question=request.question,
+            previous_history=request.history
+        )
+        return _process_chat_response(response_text, request)
+
+    # ── Stage 1: AI generates a pandas query intent ──
+    query = AIAgent.generate_data_query(
         question=request.question,
-        previous_history=request.history
+        column_meta=request.column_meta,
+        parsed_text_preview=request.content_summary,
+        previous_history=request.history,
     )
-    
+
+    operation = query.get("operation", "passthrough")
+    params = query.get("params", {})
+    narrative_hint = query.get("narrative_hint", "")
+
+    # If AI detected a chart request, use original pipeline
+    if operation in ("chart", "passthrough"):
+        response_text = AIAgent.chat_with_data(
+            parsed_text=request.content_summary,
+            question=request.question,
+            previous_history=request.history
+        )
+        return _process_chat_response(response_text, request)
+
+    # ── Stage 2: Execute pandas query on the FULL DataFrame ──
+    result_text = _execute_pandas_query(df, operation, params)
+
+    # ── Stage 3: Ask Gemini to narrate the actual results ──
+    narrated = AIAgent.narrate_result(
+        question=request.question,
+        operation=operation,
+        result_text=result_text,
+        narrative_hint=narrative_hint,
+        previous_history=request.history,
+    )
+
+    return _process_chat_response(narrated, request)
+
+
+def _execute_pandas_query(df: pd.DataFrame, operation: str, params: dict) -> str:
+    """Execute a deterministic pandas query on the full DataFrame. Zero AI."""
+    try:
+        col = params.get("column", "")
+        top_n = int(params.get("top_n", 10))
+
+        if operation == "value_counts":
+            if col not in df.columns:
+                return f"Column '{col}' not found."
+            vc = df[col].value_counts().head(top_n)
+            return f"Value counts for '{col}' (top {top_n}):\n{vc.to_string()}\nTotal unique: {df[col].nunique()}"
+
+        elif operation == "describe":
+            if col and col in df.columns:
+                desc = df[col].describe()
+                return f"Statistics for '{col}':\n{desc.to_string()}\nTotal rows: {len(df)}"
+            else:
+                desc = df.describe()
+                return f"Dataset statistics:\n{desc.to_string()}"
+
+        elif operation == "max_row":
+            if col not in df.columns:
+                return f"Column '{col}' not found."
+            top = df.nlargest(top_n, col)
+            return f"Top {top_n} rows by '{col}':\n{top.to_string(index=False)}"
+
+        elif operation == "min_row":
+            if col not in df.columns:
+                return f"Column '{col}' not found."
+            bottom = df.nsmallest(top_n, col)
+            return f"Bottom {top_n} rows by '{col}':\n{bottom.to_string(index=False)}"
+
+        elif operation == "filter":
+            op = params.get("operator", "==")
+            val = params.get("value", "")
+            if col not in df.columns:
+                return f"Column '{col}' not found."
+            if op == "contains":
+                mask = df[col].astype(str).str.contains(str(val), case=False, na=False)
+            elif op == "==":
+                mask = df[col].astype(str) == str(val)
+            elif op == ">":
+                mask = pd.to_numeric(df[col], errors='coerce') > float(val)
+            elif op == "<":
+                mask = pd.to_numeric(df[col], errors='coerce') < float(val)
+            elif op == ">=":
+                mask = pd.to_numeric(df[col], errors='coerce') >= float(val)
+            elif op == "<=":
+                mask = pd.to_numeric(df[col], errors='coerce') <= float(val)
+            elif op == "!=":
+                mask = df[col].astype(str) != str(val)
+            else:
+                mask = df[col].astype(str) == str(val)
+            filtered = df[mask].head(top_n)
+            return f"Filtered rows ({min(len(df[mask]), top_n)} shown / {len(df[mask])} match):\n{filtered.to_string(index=False)}"
+
+        elif operation == "correlation":
+            col_a = params.get("col_a", "")
+            col_b = params.get("col_b", "")
+            if col_a not in df.columns or col_b not in df.columns:
+                return f"Column(s) not found."
+            corr = df[[col_a, col_b]].corr().iloc[0, 1]
+            return f"Pearson correlation between '{col_a}' and '{col_b}': {corr:.4f}\n(Based on {len(df)} rows)"
+
+        elif operation == "group_agg":
+            group_col = params.get("group_by", "")
+            agg_col = params.get("agg_col", "")
+            agg_func = params.get("agg_func", "sum")
+            if group_col not in df.columns or agg_col not in df.columns:
+                return f"Column(s) not found."
+            grouped = df.groupby(group_col)[agg_col].agg(agg_func).sort_values(ascending=False).head(top_n)
+            return f"'{agg_col}' grouped by '{group_col}' ({agg_func}, top {top_n}):\n{grouped.to_string()}"
+
+        elif operation == "nunique":
+            if col and col in df.columns:
+                return f"Column '{col}' has {df[col].nunique()} unique values out of {len(df)} rows."
+            else:
+                uniques = {c: df[c].nunique() for c in df.columns}
+                return f"Unique value counts per column:\n" + "\n".join(f"  {k}: {v}" for k, v in uniques.items())
+
+        elif operation == "null_check":
+            if col == "__all__" or not col:
+                nulls = df.isnull().sum()
+                return f"Null counts per column:\n{nulls.to_string()}\nTotal rows: {len(df)}"
+            elif col in df.columns:
+                nc = df[col].isnull().sum()
+                return f"Column '{col}': {nc} null values out of {len(df)} rows ({nc/len(df)*100:.1f}%)"
+
+        elif operation == "head":
+            n = int(params.get("n", 10))
+            return f"First {n} rows:\n{df.head(n).to_string(index=False)}"
+
+        elif operation == "sample":
+            n = min(int(params.get("n", 5)), len(df))
+            return f"Random {n} rows:\n{df.sample(n).to_string(index=False)}"
+
+        elif operation == "summary":
+            return f"Dataset: {len(df)} rows × {len(df.columns)} columns.\nColumns: {', '.join(df.columns.tolist())}\n\nBasic stats:\n{df.describe().to_string()}"
+
+        return f"Operation '{operation}' not recognized."
+    except Exception as e:
+        return f"Query execution error: {str(e)}"
+
+
+def _process_chat_response(response_text: str, request: ChatRequest) -> dict:
+    """Process an AI response to extract chart tags and generate plotly JSON if needed."""
     plotly_json = None
     chart_info = None
 
-    # If the LLM decided to output a chart tag
     if "<CHART:" in response_text:
-        # Extract the type (e.g. <CHART: Bar Chart>)
         start = response_text.find("<CHART:") + 7
         end = response_text.find(">", start)
         chart_type = response_text[start:end].strip()
 
-        # Step 2: Use Agent 1 logic to convert this request into a specific Plotly column mapping
-        # We tell it to return configuration for ONLY this specific chart_type
         config_response = AIAgent.analyze_and_configure_charts(
             parsed_text=request.content_summary,
             filename=request.filename,
@@ -162,12 +311,11 @@ async def chat_with_data(request: ChatRequest):
             force_chart_types=[chart_type],
             user_request=request.question
         )
-        
+
         charts = config_response.get("charts", [])
         if charts:
             config = charts[0]
             df = GLOBAL_DFS.get(request.file_id)
-            
             if df is not None:
                 fig_json = None
                 if chart_type == "Bar Chart":
@@ -183,8 +331,8 @@ async def chat_with_data(request: ChatRequest):
                 elif chart_type == "Box Plot":
                     fig_json = Visualizer.generate_box_plot(df, config.get("title", ""), config.get("x_key"), config.get("y_keys", []))
                 elif chart_type == "Heatmap":
-                    fig_json = Visualizer.generate_heatmap(df, config.get("title", ""),config.get("columns"))
-                
+                    fig_json = Visualizer.generate_heatmap(df, config.get("title", ""), config.get("columns"))
+
                 if fig_json:
                     plotly_json = fig_json
                     chart_info = {

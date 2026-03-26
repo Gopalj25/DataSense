@@ -6,14 +6,16 @@ import json
 class Visualizer:
     @staticmethod
     def _apply_theme(fig: go.Figure, title: str) -> go.Figure:
-        """Applies DataSense light theme to Plotly figures."""
+        """Applies DataSense dark theme to Plotly figures."""
         fig.update_layout(
-            title=dict(text=title, font=dict(color="#1e293b", size=18, family="Inter, sans-serif")),
+            title=dict(text=title, font=dict(color="#F2F2F0", size=15, family="DM Sans, sans-serif")),
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#475569", family="Inter, sans-serif"),
-            xaxis=dict(gridcolor="rgba(0,0,0,0.06)", zerolinecolor="rgba(0,0,0,0.1)", linecolor="rgba(0,0,0,0.1)"),
-            yaxis=dict(gridcolor="rgba(0,0,0,0.06)", zerolinecolor="rgba(0,0,0,0.1)", linecolor="rgba(0,0,0,0.1)"),
+            font=dict(color="#A8A8A3", family="DM Sans, sans-serif", size=12),
+            xaxis=dict(gridcolor="rgba(255,255,255,0.05)", zerolinecolor="rgba(255,255,255,0.08)", linecolor="rgba(255,255,255,0.08)", tickfont=dict(color="#58585A")),
+            yaxis=dict(gridcolor="rgba(255,255,255,0.05)", zerolinecolor="rgba(255,255,255,0.08)", linecolor="rgba(255,255,255,0.08)", tickfont=dict(color="#58585A")),
+            legend=dict(font=dict(color="#A8A8A3")),
+            colorway=["#818CF8","#34D399","#FB923C","#F472B6","#38BDF8","#A78BFA"],
             margin=dict(l=40, r=40, t=60, b=40)
         )
         return fig
