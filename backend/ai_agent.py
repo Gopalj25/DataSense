@@ -430,3 +430,82 @@ Rules:
             return json.loads(_clean_json(r.text))
         except Exception as e:
             return {"summary": str(e), "suggested_charts": []}
+
+    # ─────────────────────────────────────────────────────────────
+    # AGENT 5 — Report Narrative (single Gemini call)
+    # ─────────────────────────────────────────────────────────────
+    @staticmethod
+    def generate_report_narrative(content_summary: str, column_meta: dict,
+                                   chart_configs: list, filename: str) -> dict:
+        """
+        Generates a structured report narrative for PDF export.
+        Returns:
+        {
+            "executive_summary": "...",
+            "chart_interpretations": {"Chart Title": "One-liner...", ...},
+            "key_findings": ["Finding 1", ...],
+            "closing_takeaway": "..."
+        }
+        """
+        fallback = {
+            "executive_summary": "",
+            "chart_interpretations": {},
+            "key_findings": [],
+            "closing_takeaway": ""
+        }
+
+        if not api_key or api_key == "your_api_key_here":
+            return fallback
+
+        try:
+            model = _get_model()
+
+            charts_desc = "\n".join([
+                f"- {c.get('type','')}: \"{c.get('title','')}\" — {c.get('description','')}"
+                for c in chart_configs
+            ])
+            cols_info = json.dumps(column_meta, indent=2)[:3000]
+
+            prompt = f"""
+You are a senior data analyst writing a professional report for the file '{filename}'.
+
+DATA PROFILE:
+{content_summary[:6000]}
+
+COLUMN METADATA:
+{cols_info}
+
+CHARTS GENERATED:
+{charts_desc}
+
+Write a structured report narrative. Return ONLY valid JSON (no markdown fences):
+{{
+    "executive_summary": "2-3 paragraphs. What is this data? What are the key patterns? What stands out? Write as if briefing a manager.",
+    "chart_interpretations": {{
+        "Exact Chart Title": "One clear sentence explaining what this chart reveals and why it matters."
+    }},
+    "key_findings": [
+        "Finding 1: specific, data-backed insight",
+        "Finding 2: specific, data-backed insight",
+        "Finding 3: specific, data-backed insight"
+    ],
+    "closing_takeaway": "One strong closing sentence — the single most important thing the reader should walk away with."
+}}
+
+RULES:
+- executive_summary: 2-3 paragraphs, professional tone, mention actual column names and values.
+- chart_interpretations: one entry per chart, key must EXACTLY match the chart title provided above.
+- key_findings: 3-6 bullet points, each must reference specific data.
+- closing_takeaway: one sentence, actionable or insightful.
+- Do NOT use markdown formatting inside the JSON values — plain text only.
+"""
+            response = model.generate_content(prompt)
+            result = json.loads(_clean_json(response.text))
+            # Ensure all keys present
+            for key in fallback:
+                if key not in result:
+                    result[key] = fallback[key]
+            return result
+        except Exception as e:
+            print(f"Report narrative generation failed: {e}")
+            return fallback

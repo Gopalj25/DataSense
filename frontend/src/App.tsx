@@ -4,7 +4,8 @@ import Dashboard from './components/Dashboard';
 import Chat from './components/Chat';
 import Sidebar from './components/Sidebar';
 import type { ViewType } from './components/Sidebar';
-import { Download, MessageSquare, Moon, Sun } from 'lucide-react';
+import { Download, MessageSquare, Moon, Sun, Loader2 } from 'lucide-react';
+import { generateReport } from './utils/reportGenerator';
 
 export type ChartConfig = {
   type: string;
@@ -45,6 +46,8 @@ function App() {
   const [activeView, setActiveView] = useState<ViewType>('dashboard');
   const [chatOpen, setChatOpen] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [exporting, setExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState('');
 
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
@@ -100,22 +103,27 @@ function App() {
         <div className="flex items-center gap-2">
           {insightData && (
             <button
-              title="Download chart"
+              title="Download Full Report (PDF)"
               className="w-8 h-8 rounded-lg flex items-center justify-center transition-all"
-              style={{ color: 'var(--text-muted)' }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-elevated)')}
+              style={{ color: exporting ? 'var(--accent)' : 'var(--text-muted)' }}
+              disabled={exporting}
+              onMouseEnter={e => !exporting && (e.currentTarget.style.background = 'var(--bg-elevated)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-              onClick={() => {
-                const gd = document.querySelector('.js-plotly-plot') as any;
-                if (gd && (window as any).Plotly) {
-                  (window as any).Plotly.downloadImage(gd, {
-                    format: 'png', width: 1200, height: 700,
-                    filename: `${insightData.filename}_datasense`
-                  });
+              onClick={async () => {
+                if (exporting) return;
+                setExporting(true);
+                setExportStatus('Starting…');
+                try {
+                  await generateReport(insightData, (status) => setExportStatus(status));
+                } catch (e) {
+                  console.error('Report generation failed:', e);
+                } finally {
+                  setExporting(false);
+                  setExportStatus('');
                 }
               }}
             >
-              <Download size={16} />
+              {exporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
             </button>
           )}
           <button
@@ -130,6 +138,19 @@ function App() {
           </button>
         </div>
       </header>
+
+      {/* Export progress overlay */}
+      {exporting && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center"
+             style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
+          <div className="flex flex-col items-center gap-3 p-6 rounded-2xl"
+               style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+            <Loader2 size={28} className="animate-spin" style={{ color: 'var(--accent)' }} />
+            <p style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>Generating Report</p>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>{exportStatus}</p>
+          </div>
+        </div>
+      )}
 
       {/* ─── BODY ───────────────────────────────────────────── */}
       <div className="flex-1 flex overflow-hidden">

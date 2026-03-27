@@ -348,6 +348,28 @@ def _process_chat_response(response_text: str, request: ChatRequest) -> dict:
     }
 
 
+# ─────────────────────────────────────────────────────────────
+# Report Summary — AI narrative for PDF export
+# ─────────────────────────────────────────────────────────────
+class ReportRequest(BaseModel):
+    content_summary: str
+    column_meta: dict
+    chart_configs: list
+    filename: str
+
+
+@app.post("/api/report-summary")
+async def report_summary(request: ReportRequest):
+    """Generate AI narrative for PDF report export."""
+    result = AIAgent.generate_report_narrative(
+        content_summary=request.content_summary,
+        column_meta=request.column_meta,
+        chart_configs=request.chart_configs,
+        filename=request.filename,
+    )
+    return result
+
+
 class GraphRequest(BaseModel):
     content_summary: str
 
