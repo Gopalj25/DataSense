@@ -15,6 +15,7 @@ interface ChatProps {
     chartType: string,
     newChartData?: ChartConfig | null,
   ) => void;
+  onTableRequested?: () => void;
   chatSuggestions?: string[];
   isPinned?: boolean;
   onPin?: () => void;
@@ -111,6 +112,7 @@ export default function Chat({
   contentSummary,
   chatSuggestions,
   onChartRequested,
+  onTableRequested,
   isPinned = false,
   onPin,
 }: ChatProps) {
@@ -169,7 +171,9 @@ export default function Chat({
       });
       let answer: string = response.data.answer || "";
       const chartMatch = answer.match(/[`*]*<CHART:\s*(.*?)>[`*]*/i);
+      let hasChart = false;
       if (chartMatch?.[1]) {
+        hasChart = true;
         const chartType = chartMatch[1].trim();
         const newChartInfo = response.data.new_chart;
         const plotlyJson = response.data.plotly_json;
@@ -184,6 +188,14 @@ export default function Chat({
         if (onChartRequested) onChartRequested(chartType, chartPayload);
         answer = answer.replace(chartMatch[0], "").trim();
         answer = `📊 **${chartType}** added to dashboard.\n\n${answer}`;
+      }
+      // Only switch to Table view if NO chart was generated and response has a table
+      if (!hasChart) {
+        const hasTable = /\|.+\|\n\|[-:| ]+\|/m.test(answer);
+        if (hasTable && onTableRequested) {
+          onTableRequested();
+          answer += `\n\n💡 *Switched to Table view for a better look.*`;
+        }
       }
       setMessages([
         ...newMessages,

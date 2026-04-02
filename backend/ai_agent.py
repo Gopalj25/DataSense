@@ -109,25 +109,36 @@ class AIAgent:
                 Your tasks:
                 1. Write a concise executive summary (2-3 sentences) of what this data represents and its key patterns.
                 2. Recommend 2-4 chart types that are MOST MEANINGFUL for this specific data. Choose ONLY from:
-                [Bar Chart, Line Chart, Pie Chart, Scatter Plot, Histogram, Box Plot, Heatmap, Knowledge Graph]
+                [Bar Chart, Line Chart, Pie Chart, Scatter Plot, Histogram, Box Plot, Heatmap, Area Chart, Violin Plot, Treemap, Sunburst, Funnel Chart, Waterfall Chart, Knowledge Graph]
 
                 Rules:
                 - "Bar Chart" → categorical x + numeric y, goal is comparing magnitudes across groups.
-                                AVOID if x-axis is time-based, has 20+ unique values, or values sum to 100%. (compare groups or show breakdowns)
+                                AVOID if x-axis is time-based, has 20+ unique values, or values sum to 100%.
                 - "Line Chart" → x-axis is a date, month, year, timestamp, or any ordered/sequential column.
-                                PREFER over Bar whenever time or progression is present, even if stored as string.
+                                PREFER over Bar whenever time or progression is present.
                 - "Pie Chart" → one categorical (2-8 unique values only) + one numeric that represents parts of a whole.
                                 AVOID if values don't sum meaningfully or if Bar Chart shows the comparison more clearly.
-                - "Scatter Plot" → if there are 2+ independent numeric columns where the goal is correlation or clustering.
+                - "Scatter Plot" → 2+ independent numeric columns where the goal is correlation or clustering.
                                 AVOID if either axis is an ID, index, or flag column disguised as numeric.
                 - "Histogram" → exactly one continuous numeric column, goal is distribution or frequency of values.
-                                AVOID on categorical, ID, or near-constant columns — they produce meaningless bins.
+                                AVOID on categorical, ID, or near-constant columns.
                 - "Box Plot" → one categorical grouping column + one numeric column, goal is spread or outlier comparison.
-                                AVOID if the categorical column has only 1 unique value or the numeric column barely varies.
-                - "Heatmap" → 3 or more numeric columns, goal is understanding correlations across all of them at once.
-                                AVOID if numeric columns are IDs or flags — correlation between those is meaningless.
+                                AVOID if the categorical column has only 1 unique value.
+                - "Heatmap" → 3 or more numeric columns, goal is understanding correlations across all of them.
+                                AVOID if numeric columns are IDs or flags.
+                - "Area Chart" → like Line Chart but fills the area under the curve. Best for showing cumulative totals or stacked compositions over time.
+                                PREFER over Line when showing volume or magnitude matters.
+                - "Violin Plot" → like Box Plot but shows the full distribution shape. Best for comparing distributions across categories.
+                                PREFER over Box Plot when distribution shape (bimodal, skewed) matters.
+                - "Treemap" → hierarchical data with 1-2 categorical levels + one numeric value. Shows part-of-whole with nesting.
+                                AVOID if data has no natural hierarchy.
+                - "Sunburst" → like Treemap but radial. Best for 2+ levels of hierarchy.
+                                AVOID if only 1 categorical level.
+                - "Funnel Chart" → staged/sequential data where values decrease at each stage (e.g., conversion funnels).
+                                AVOID if data doesn't represent a sequential process.
+                - "Waterfall Chart" → shows incremental positive/negative changes from a starting value.
+                                AVOID if data doesn't represent sequential additions/subtractions.
                 - "Knowledge Graph" → always include for PDFs or text documents, and for any relational or hierarchical dataset.
-                                Can be combined with other chart types on mixed datasets.
 
                 Tie-breaking rules:
                 → if data has BOTH time AND categories, prefer Line Chart with color grouping over Bar Chart
@@ -180,6 +191,12 @@ class AIAgent:
             - Histogram: x_key (String: ONE numeric column whose distribution is being analysed)
             - Box Plot: x_key (String: categorical/dimensional column for grouping), y_key (String: ONE numeric column whose spread is being analysed)
             - Heatmap: columns (Array of Strings OR null: list of numeric column names to include in correlation matrix — if all numeric columns should be used, set to null)
+            - Area Chart: x_key (String: time or ordered dimension), y_keys (Array of Strings: 1-3 metric columns) — same as Line Chart
+            - Violin Plot: x_key (String: categorical/dimensional column for grouping), y_keys (Array of Strings: EXACTLY ONE numeric column) — same as Box Plot
+            - Treemap: path_cols (Array of Strings: 1-2 categorical columns for hierarchy levels), value_key (String: ONE numeric column for size)
+            - Sunburst: path_cols (Array of Strings: 1-2 categorical columns for hierarchy levels), value_key (String: ONE numeric column for size)
+            - Funnel Chart: label_key (String: categorical column for stages), value_key (String: ONE numeric column for magnitude)
+            - Waterfall Chart: x_key (String: categorical/dimensional column for labels), y_keys (Array of Strings: EXACTLY ONE numeric column for values)
             - Knowledge Graph: no columns needed, just title and description
 
             CRITICAL RULES FOR VALUES:
@@ -226,6 +243,20 @@ class AIAgent:
                 "title": "Descriptive chart title",
                 "columns": null,
                 "description": "Two sentence about what this shows."
+            }},
+            {{
+                "type": "Treemap",
+                "title": "Descriptive chart title",
+                "path_cols": ["Category", "SubCategory"],
+                "value_key": "Revenue",
+                "description": "One sentence."
+            }},
+            {{
+                "type": "Funnel Chart",
+                "title": "Descriptive chart title",
+                "label_key": "Stage",
+                "value_key": "Count",
+                "description": "One sentence."
             }},
             {{
                 "type": "Knowledge Graph",
@@ -313,7 +344,7 @@ RESPONSE RULES:
 3. NEVER output any code, HTML, JavaScript, Python, or implementation details. You are a data analyst, not a programmer.
 4. If the user asks to CREATE, SHOW, GENERATE, or DISPLAY a visualization (e.g. "show me a scatter plot", "create a bar chart", "can I see a pie chart", "visualize this as a line chart"):
    - You MUST start your response with EXACTLY this tag on its own line: <CHART: ChartType>
-   - ChartType must be one of: Bar Chart, Line Chart, Pie Chart, Scatter Plot, Knowledge Graph
+   - ChartType must be one of: Bar Chart, Line Chart, Area Chart, Pie Chart, Scatter Plot, Histogram, Box Plot, Violin Plot, Heatmap, Treemap, Sunburst, Funnel Chart, Waterfall Chart, Knowledge Graph
    - After the tag, write a brief 1-2 sentence description of what the visualization shows based on the data. Do NOT describe how to build it.
 5. If the user is just asking a question (not requesting a visualization), answer normally without any CHART tag.
 """
@@ -402,7 +433,7 @@ Rules:
 2. Answer based ONLY on the provided result data — this is from the COMPLETE dataset, not a sample.
 3. Be concise and insightful. Add a one-sentence observation if relevant.
 4. Never output code. Never say you only have sample data — you have the full result.
-5. If the user asked for a visualization, start with <CHART: ChartType> tag (Bar Chart, Line Chart, Pie Chart, Scatter Plot, Knowledge Graph).
+5. If the user asked for a visualization, start with <CHART: ChartType> tag (Bar Chart, Line Chart, Area Chart, Pie Chart, Scatter Plot, Histogram, Box Plot, Violin Plot, Heatmap, Treemap, Sunburst, Funnel Chart, Waterfall Chart, Knowledge Graph).
 """
         result = _llama_chat(prompt)
         return result if result else result_text

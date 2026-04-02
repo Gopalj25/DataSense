@@ -142,15 +142,26 @@ class ChatRequest(BaseModel):
 async def chat_with_data(request: ChatRequest):
     """
     Smart hybrid chat:
-    1. Ask Gemini to translate user question into a pandas operation
-    2. Execute the pandas operation on the FULL cached DataFrame
-    3. Ask Gemini to narrate the real results
+    1. Detect visualization requests deterministically (regex) → route to chart pipeline
+    2. Otherwise: AI translates question into pandas op → execute → narrate
     Falls back to original method for PDFs / when DataFrame is unavailable.
     """
+    import re
     df = GLOBAL_DFS.get(request.file_id)
 
+    # ── Deterministic visualization detection ── 
+    # Catches requests like "show me a violin plot", "create treemap", "plot histogram", etc.
+    VIZ_KEYWORDS = re.compile(
+        r'\b(plot|chart|graph|histogram|heatmap|heat map|treemap|tree map|'
+        r'sunburst|sun burst|funnel|waterfall|violin|scatter|box\s*plot|'
+        r'bar\s*chart|line\s*chart|pie\s*chart|area\s*chart|visuali[sz]|'
+        r'knowledge\s*graph|correlation\s*matrix|distribution)\b',
+        re.IGNORECASE
+    )
+    is_viz_request = bool(VIZ_KEYWORDS.search(request.question))
+
     # ── Fallback for PDFs or missing DataFrames → use original method ──
-    if df is None:
+    if df is None or is_viz_request:
         response_text = AIAgent.chat_with_data(
             parsed_text=request.content_summary,
             question=request.question,
@@ -327,20 +338,30 @@ def _process_chat_response(response_text: str, request: ChatRequest) -> dict:
             df = GLOBAL_DFS.get(request.file_id)
             if df is not None:
                 fig_json = None
-                if chart_type == "Bar Chart":
-                    fig_json = Visualizer.generate_bar_chart(df, config.get("title", ""), config.get("x_key"), config.get("y_keys", []))
-                elif chart_type == "Line Chart":
-                    fig_json = Visualizer.generate_line_chart(df, config.get("title", ""), config.get("x_key"), config.get("y_keys", []))
-                elif chart_type == "Pie Chart":
-                    fig_json = Visualizer.generate_pie_chart(df, config.get("title", ""), config.get("label_key"), config.get("value_key"))
-                elif chart_type == "Scatter Plot":
-                    fig_json = Visualizer.generate_scatter_plot(df, config.get("title", ""), config.get("x_key"), config.get("y_keys", [None])[0], config.get("tooltip_key"))
-                elif chart_type == "Histogram":
-                    fig_json = Visualizer.generate_histogram(df, config.get("title", ""), config.get("x_key"), config.get("nbins", 30))
-                elif chart_type == "Box Plot":
-                    fig_json = Visualizer.generate_box_plot(df, config.get("title", ""), config.get("x_key"), config.get("y_keys", []))
-                elif chart_type == "Heatmap":
-                    fig_json = Visualizer.generate_heatmap(df, config.get("title", ""), config.get("columns"))
+                t = config.get("title", "")
+                xk = config.get("x_key")
+                yk = config.get("y_keys", [])
+                lk = config.get("label_key")
+                vk = config.get("value_key")
+                pk = config.get("path_cols", [lk or xk] if (lk or xk) else [])
+                CHAT_CHART_DISPATCH = {
+                    "Bar Chart":       lambda: Visualizer.generate_bar_chart(df, t, xk, yk),
+                    "Line Chart":      lambda: Visualizer.generate_line_chart(df, t, xk, yk),
+                    "Pie Chart":       lambda: Visualizer.generate_pie_chart(df, t, lk, vk),
+                    "Scatter Plot":    lambda: Visualizer.generate_scatter_plot(df, t, xk, yk[0] if yk else None, config.get("tooltip_key")),
+                    "Histogram":       lambda: Visualizer.generate_histogram(df, t, xk, config.get("nbins", 30)),
+                    "Box Plot":        lambda: Visualizer.generate_box_plot(df, t, xk, yk[0] if yk else None),
+                    "Heatmap":         lambda: Visualizer.generate_heatmap(df, t, config.get("columns")),
+                    "Area Chart":      lambda: Visualizer.generate_area_chart(df, t, xk, yk),
+                    "Violin Plot":     lambda: Visualizer.generate_violin_plot(df, t, xk, yk[0] if yk else None),
+                    "Treemap":         lambda: Visualizer.generate_treemap(df, t, pk, vk or (yk[0] if yk else None)),
+                    "Sunburst":        lambda: Visualizer.generate_sunburst(df, t, pk, vk or (yk[0] if yk else None)),
+                    "Funnel Chart":    lambda: Visualizer.generate_funnel_chart(df, t, lk or xk, vk or (yk[0] if yk else None)),
+                    "Waterfall Chart": lambda: Visualizer.generate_waterfall_chart(df, t, xk, yk[0] if yk else None),
+                }
+                chart_handler = CHAT_CHART_DISPATCH.get(chart_type)
+                if chart_handler:
+                    fig_json = chart_handler()
 
                 if fig_json:
                     plotly_json = fig_json
@@ -433,6 +454,7 @@ class RenderRequest(BaseModel):
     tooltip_key: Optional[str] = None
     nbins:       Optional[int] = 30
     columns:     Optional[List[str]] = None
+    path_cols:   Optional[List[str]] = None
     color:       Optional[str] = None
 
 
@@ -447,13 +469,19 @@ def render_chart(req: RenderRequest):
         _patch_palette(req.color)
 
     CHART_DISPATCH = {
-        "Bar Chart":    lambda: Visualizer.generate_bar_chart(df, req.title, req.x_key, req.y_keys or []),
-        "Line Chart":   lambda: Visualizer.generate_line_chart(df, req.title, req.x_key, req.y_keys or []),
-        "Pie Chart":    lambda: Visualizer.generate_pie_chart(df, req.title, req.label_key, req.value_key),
-        "Scatter Plot": lambda: Visualizer.generate_scatter_plot(df, req.title, req.x_key, (req.y_keys[0] if req.y_keys else None), req.tooltip_key),
-        "Histogram":    lambda: Visualizer.generate_histogram(df, req.title, req.x_key, req.nbins or 30),
-        "Box Plot":     lambda: Visualizer.generate_box_plot(df, req.title, req.x_key, (req.y_keys[0] if req.y_keys else None)),
-        "Heatmap":      lambda: Visualizer.generate_heatmap(df, req.title, req.columns),
+        "Bar Chart":       lambda: Visualizer.generate_bar_chart(df, req.title, req.x_key, req.y_keys or []),
+        "Line Chart":      lambda: Visualizer.generate_line_chart(df, req.title, req.x_key, req.y_keys or []),
+        "Pie Chart":       lambda: Visualizer.generate_pie_chart(df, req.title, req.label_key, req.value_key),
+        "Scatter Plot":    lambda: Visualizer.generate_scatter_plot(df, req.title, req.x_key, (req.y_keys[0] if req.y_keys else None), req.tooltip_key),
+        "Histogram":       lambda: Visualizer.generate_histogram(df, req.title, req.x_key, req.nbins or 30),
+        "Box Plot":        lambda: Visualizer.generate_box_plot(df, req.title, req.x_key, (req.y_keys[0] if req.y_keys else None)),
+        "Heatmap":         lambda: Visualizer.generate_heatmap(df, req.title, req.columns),
+        "Area Chart":      lambda: Visualizer.generate_area_chart(df, req.title, req.x_key, req.y_keys or []),
+        "Violin Plot":     lambda: Visualizer.generate_violin_plot(df, req.title, req.x_key, (req.y_keys[0] if req.y_keys else None)),
+        "Treemap":         lambda: Visualizer.generate_treemap(df, req.title, req.path_cols or [req.label_key or req.x_key], req.value_key or (req.y_keys[0] if req.y_keys else None)),
+        "Sunburst":        lambda: Visualizer.generate_sunburst(df, req.title, req.path_cols or [req.label_key or req.x_key], req.value_key or (req.y_keys[0] if req.y_keys else None)),
+        "Funnel Chart":    lambda: Visualizer.generate_funnel_chart(df, req.title, req.label_key or req.x_key, req.value_key or (req.y_keys[0] if req.y_keys else None)),
+        "Waterfall Chart": lambda: Visualizer.generate_waterfall_chart(df, req.title, req.x_key, (req.y_keys[0] if req.y_keys else None)),
     }
 
     handler = CHART_DISPATCH.get(req.chart_type)

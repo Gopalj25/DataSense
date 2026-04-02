@@ -301,18 +301,38 @@ export default function Dashboard({ data, externalChartRequest }: DashboardProps
         if (!externalChartRequest) return;
         if (externalChartRequest.ts <= lastProcessedTs.current) return;
         lastProcessedTs.current = externalChartRequest.ts;
-        const incoming = externalChartRequest.type.trim();
+        
+        const incomingType = externalChartRequest.type.trim();
+        const newData = externalChartRequest.new_chart_data;
+        
         setChartTabs(prevTabs => {
-            const existsAt = prevTabs.findIndex(t => t.type.toLowerCase() === incoming.toLowerCase());
-            if (existsAt >= 0) {
-                setTimeout(() => { setSelectedIdx(existsAt); chartAreaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
+            const existsIdx = prevTabs.findIndex(t => 
+                t.type.toLowerCase() === incomingType.toLowerCase() && 
+                (!newData || t.title === newData.title)
+            );
+            
+            if (existsIdx >= 0) {
+                setTimeout(() => { 
+                    setSelectedIdx(existsIdx); 
+                    chartAreaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); 
+                }, 50);
                 return prevTabs;
-            } else {
-                const newConfig = autoConfigForType(incoming);
-                const updated = [...prevTabs, newConfig];
-                setTimeout(() => { setSelectedIdx(updated.length - 1); chartAreaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
-                return updated;
             }
+
+            // If it's a completely new generated chart from chat, add it as a new tab
+            let newConfig: ChartConfig;
+            if (newData) {
+                newConfig = { ...newData, isBlank: false };
+            } else {
+                newConfig = autoConfigForType(incomingType);
+            }
+            
+            const updated = [...prevTabs, newConfig];
+            setTimeout(() => { 
+                setSelectedIdx(updated.length - 1); 
+                chartAreaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); 
+            }, 50);
+            return updated;
         });
     }, [externalChartRequest]);
 
@@ -334,10 +354,11 @@ export default function Dashboard({ data, externalChartRequest }: DashboardProps
 
     const getIcon = (type: string, size = 14) => {
         const t = type.toLowerCase();
-        if (t.includes('pie')) return <PieChartIcon size={size} />;
-        if (t.includes('bar')) return <BarChart2 size={size} />;
+        if (t.includes('pie') || t.includes('sunburst') || t.includes('treemap')) return <PieChartIcon size={size} />;
+        if (t.includes('bar') || t.includes('histogram') || t.includes('waterfall') || t.includes('funnel')) return <BarChart2 size={size} />;
         if (t.includes('line') || t.includes('trend') || t.includes('area')) return <TrendingUp size={size} />;
-        if (t.includes('scatter') || t.includes('plot')) return <Activity size={size} />;
+        if (t.includes('scatter') || t.includes('plot') || t.includes('violin') || t.includes('box')) return <Activity size={size} />;
+        if (t.includes('heatmap')) return <Activity size={size} />;
         if (t.includes('map') || t.includes('geo')) return <MapIcon size={size} />;
         if (t.includes('graph') || t.includes('network') || t.includes('knowledge')) return <Network size={size} />;
         return <Activity size={size} />;

@@ -65,6 +65,11 @@ function App() {
 
   const handleChartRequested = (chartType: string, newChartData?: ChartConfig | null) => {
     setChartRequest({ type: chartType, ts: Date.now(), new_chart_data: newChartData });
+    setActiveView('dashboard');
+  };
+
+  const handleTableRequested = () => {
+    setActiveView('table');
   };
 
   const rowCount = insightData?.original_data?.length ?? 0;
@@ -259,6 +264,7 @@ function App() {
               contentSummary={insightData.content_summary}
               chatSuggestions={insightData.chat_suggestions}
               onChartRequested={(type, data) => handleChartRequested(type, data)}
+              onTableRequested={handleTableRequested}
               isPinned={chatPinned}
               onPin={() => {
                 if (chatPinned) {

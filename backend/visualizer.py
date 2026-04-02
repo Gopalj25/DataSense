@@ -246,3 +246,113 @@ class Visualizer:
             return fig.to_json()
         except Exception as e:
             return json.dumps({"error": f"Heatmap Error: {str(e)}"})
+
+    @staticmethod
+    def generate_area_chart(df: pd.DataFrame, title: str, x_col: str, y_cols: list[str]) -> str:
+        """Generates a filled area chart JSON."""
+        try:
+            temp_df = df.copy()
+            if temp_df[x_col].dtype == 'object':
+                try:
+                    temp_df[x_col] = pd.to_datetime(temp_df[x_col])
+                except:
+                    pass
+            temp_df = temp_df.sort_values(by=x_col)
+            if len(temp_df) > 5000:
+                temp_df = temp_df.groupby(x_col)[y_cols].mean().reset_index()
+
+            fig = px.area(temp_df, x=x_col, y=y_cols,
+                          color_discrete_sequence=['#818CF8', '#34D399', '#FB923C', '#F472B6'])
+            fig = Visualizer._apply_theme(fig, title)
+            return fig.to_json()
+        except Exception as e:
+            return json.dumps({"error": f"Area Chart Error: {str(e)}"})
+
+    @staticmethod
+    def generate_violin_plot(df: pd.DataFrame, title: str, x_col: str, y_col: str) -> str:
+        """Generates a violin plot JSON showing distribution shape across categories."""
+        try:
+            plot_df = df.copy()
+            if plot_df[x_col].nunique() > 15:
+                top_cats = plot_df[x_col].value_counts().nlargest(15).index
+                plot_df = plot_df[plot_df[x_col].isin(top_cats)]
+            if len(plot_df) > 20000:
+                plot_df = plot_df.sample(n=20000, random_state=42)
+
+            fig = px.violin(plot_df, x=x_col, y=y_col, color=x_col, box=True, points='outliers',
+                            color_discrete_sequence=['#8b5cf6', '#3b82f6', '#ec4899', '#f97316', '#14b8a6'])
+            fig = Visualizer._apply_theme(fig, title)
+            fig.update_layout(showlegend=False)
+            return fig.to_json()
+        except Exception as e:
+            return json.dumps({"error": f"Violin Plot Error: {str(e)}"})
+
+    @staticmethod
+    def generate_treemap(df: pd.DataFrame, title: str, path_cols: list[str], value_col: str) -> str:
+        """Generates a treemap JSON for hierarchical part-of-whole data."""
+        try:
+            plot_df = df.copy()
+            # Aggregate by path columns
+            agg_df = plot_df.groupby(path_cols)[value_col].sum().reset_index()
+            # Limit to top 50 by value to keep it readable
+            if len(agg_df) > 50:
+                agg_df = agg_df.nlargest(50, value_col)
+
+            fig = px.treemap(agg_df, path=path_cols, values=value_col,
+                             color=value_col, color_continuous_scale=['#312e81', '#818CF8', '#c4b5fd'])
+            fig = Visualizer._apply_theme(fig, title)
+            fig.update_traces(textinfo='label+percent parent')
+            return fig.to_json()
+        except Exception as e:
+            return json.dumps({"error": f"Treemap Error: {str(e)}"})
+
+    @staticmethod
+    def generate_sunburst(df: pd.DataFrame, title: str, path_cols: list[str], value_col: str) -> str:
+        """Generates a sunburst chart JSON for radial hierarchical data."""
+        try:
+            plot_df = df.copy()
+            agg_df = plot_df.groupby(path_cols)[value_col].sum().reset_index()
+            if len(agg_df) > 50:
+                agg_df = agg_df.nlargest(50, value_col)
+
+            fig = px.sunburst(agg_df, path=path_cols, values=value_col,
+                              color=value_col, color_continuous_scale=['#312e81', '#818CF8', '#c4b5fd'])
+            fig = Visualizer._apply_theme(fig, title)
+            return fig.to_json()
+        except Exception as e:
+            return json.dumps({"error": f"Sunburst Error: {str(e)}"})
+
+    @staticmethod
+    def generate_funnel_chart(df: pd.DataFrame, title: str, stage_col: str, value_col: str) -> str:
+        """Generates a funnel chart JSON for staged/conversion data."""
+        try:
+            agg_df = df.groupby(stage_col)[value_col].sum().reset_index()
+            agg_df = agg_df.sort_values(by=value_col, ascending=False)
+
+            fig = px.funnel(agg_df, x=value_col, y=stage_col,
+                            color_discrete_sequence=['#818CF8'])
+            fig = Visualizer._apply_theme(fig, title)
+            return fig.to_json()
+        except Exception as e:
+            return json.dumps({"error": f"Funnel Chart Error: {str(e)}"})
+
+    @staticmethod
+    def generate_waterfall_chart(df: pd.DataFrame, title: str, x_col: str, y_col: str) -> str:
+        """Generates a waterfall chart JSON showing incremental positive/negative changes."""
+        try:
+            plot_df = df[[x_col, y_col]].dropna().head(30)  # Limit for readability
+            labels = plot_df[x_col].astype(str).tolist()
+            values = plot_df[y_col].tolist()
+
+            fig = go.Figure(go.Waterfall(
+                x=labels, y=values,
+                connector={"line": {"color": "rgba(129,140,248,0.3)"}},
+                increasing={"marker": {"color": "#34D399"}},
+                decreasing={"marker": {"color": "#F472B6"}},
+                totals={"marker": {"color": "#818CF8"}},
+                textposition="outside",
+            ))
+            fig = Visualizer._apply_theme(fig, title)
+            return fig.to_json()
+        except Exception as e:
+            return json.dumps({"error": f"Waterfall Chart Error: {str(e)}"})

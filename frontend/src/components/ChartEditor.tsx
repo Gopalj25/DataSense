@@ -13,6 +13,9 @@ import {
   Plus,
   Trash2,
   Pencil,
+  AreaChart,
+  Filter,
+  Droplets,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
@@ -28,6 +31,7 @@ export interface EditorConfig {
   tooltip_key?: string;
   nbins?: number;
   columns?: string[];
+  path_cols?: string[];
   color?: string;
 }
 
@@ -45,11 +49,17 @@ export type ColumnMeta = Record<
 const CHART_TYPES = [
   { id: "Bar Chart", icon: BarChart2, label: "Bar" },
   { id: "Line Chart", icon: TrendingUp, label: "Line" },
+  { id: "Area Chart", icon: AreaChart, label: "Area" },
   { id: "Pie Chart", icon: PieIcon, label: "Pie" },
   { id: "Scatter Plot", icon: Activity, label: "Scatter" },
   { id: "Histogram", icon: Layers, label: "Hist" },
   { id: "Box Plot", icon: Box, label: "Box" },
+  { id: "Violin Plot", icon: Activity, label: "Violin" },
   { id: "Heatmap", icon: Grid3x3, label: "Heat" },
+  { id: "Treemap", icon: Grid3x3, label: "Tree" },
+  { id: "Sunburst", icon: PieIcon, label: "Sun" },
+  { id: "Funnel Chart", icon: Filter, label: "Funnel" },
+  { id: "Waterfall Chart", icon: Droplets, label: "Fall" },
 ];
 
 const COLOUR_SWATCHES = [
@@ -77,6 +87,7 @@ export function autoSuggestAxes(
   switch (type) {
     case "Bar Chart":
     case "Line Chart":
+    case "Area Chart":
       return {
         x_key: categoricalCols[0] ?? allCols[0],
         y_keys: numericCols.slice(0, 1),
@@ -94,12 +105,29 @@ export function autoSuggestAxes(
     case "Histogram":
       return { x_key: numericCols[0] };
     case "Box Plot":
+    case "Violin Plot":
       return {
         x_key: categoricalCols[0] ?? allCols[0],
         y_keys: [numericCols[0]],
       };
     case "Heatmap":
       return { columns: numericCols.slice(0, 10) };
+    case "Treemap":
+    case "Sunburst":
+      return {
+        path_cols: categoricalCols.slice(0, 2).length ? categoricalCols.slice(0, 2) : [allCols[0]],
+        value_key: numericCols[0],
+      };
+    case "Funnel Chart":
+      return {
+        label_key: categoricalCols[0] ?? allCols[0],
+        value_key: numericCols[0],
+      };
+    case "Waterfall Chart":
+      return {
+        x_key: categoricalCols[0] ?? allCols[0],
+        y_keys: [numericCols[0]],
+      };
     default:
       return {};
   }
@@ -118,10 +146,20 @@ export function validateConfig(
     return null;
   }
   if (config.type === "Heatmap") return null;
+  if (config.type === "Treemap" || config.type === "Sunburst") {
+    if (!config.path_cols?.length) return "Select at least one grouping column.";
+    if (!config.value_key || !cols.includes(config.value_key)) return "Select a value column.";
+    return null;
+  }
+  if (config.type === "Funnel Chart") {
+    if (!config.label_key || !cols.includes(config.label_key)) return "Select a stage column.";
+    if (!config.value_key || !cols.includes(config.value_key)) return "Select a value column.";
+    return null;
+  }
   if (!config.x_key || !cols.includes(config.x_key))
     return "Select a valid X axis column.";
   if (
-    ["Bar Chart", "Line Chart", "Scatter Plot", "Box Plot"].includes(
+    ["Bar Chart", "Line Chart", "Area Chart", "Scatter Plot", "Box Plot", "Violin Plot", "Waterfall Chart"].includes(
       config.type,
     )
   ) {
@@ -306,6 +344,8 @@ export default function ChartEditor({
     ? numericColumns
     : allColumns;
   const yOptions = numericColumns;
+  const showTreeSun = cfg.type === "Treemap" || cfg.type === "Sunburst";
+  const showFunnel = cfg.type === "Funnel Chart";
   const colBadge = (col: string) =>
     columnMeta[col]?.type === "numeric" ? "Num" : "Cat";
 
@@ -356,6 +396,7 @@ export default function ChartEditor({
         tooltip_key: cfg.tooltip_key,
         nbins: cfg.nbins,
         columns: cfg.columns,
+        path_cols: cfg.path_cols,
         color: cfg.color,
       });
       onApply(res.data.plotly_json, cfg);
@@ -394,10 +435,13 @@ export default function ChartEditor({
   const showXY = [
     "Bar Chart",
     "Line Chart",
+    "Area Chart",
     "Scatter Plot",
     "Box Plot",
+    "Violin Plot",
+    "Waterfall Chart",
   ].includes(cfg.type);
-  const showPie = cfg.type === "Pie Chart";
+  const showPie = cfg.type === "Pie Chart" || showFunnel;
   const showHist = cfg.type === "Histogram";
 
   return (
@@ -594,6 +638,32 @@ export default function ChartEditor({
                     }}
                   />
                 </div>
+              </>
+            )}
+            {showTreeSun && (
+              <>
+                <div>
+                  <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>
+                    Hierarchy Columns
+                  </p>
+                  {(cfg.path_cols || []).map((pc, i) => (
+                    <div key={i} className="flex gap-1 mb-1">
+                      <select value={pc} onChange={(e) => { const next = [...(cfg.path_cols || [])]; next[i] = e.target.value; patch({ path_cols: next }); }}
+                        className="flex-1 rounded-lg text-sm outline-none transition"
+                        style={{ background: 'var(--bg-inset)', border: '1px solid var(--border)', padding: '6px 10px', color: 'var(--text-primary)' }}>
+                        {(categoricalColumns.length ? categoricalColumns : allColumns).map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                      {(cfg.path_cols?.length || 0) > 1 && (
+                        <button onClick={() => { const next = [...(cfg.path_cols || [])]; next.splice(i, 1); patch({ path_cols: next }); }} style={{ color: 'var(--danger)' }}><Trash2 size={14} /></button>
+                      )}
+                    </div>
+                  ))}
+                  {(cfg.path_cols?.length || 0) < 3 && (
+                    <button onClick={() => { const unused = (categoricalColumns.length ? categoricalColumns : allColumns).filter(c => !cfg.path_cols?.includes(c)); if (unused.length) patch({ path_cols: [...(cfg.path_cols || []), unused[0]] }); }}
+                      className="flex items-center gap-1 text-xs mt-0.5" style={{ color: 'var(--accent-text)' }}><Plus size={12} /> Add level</button>
+                  )}
+                </div>
+                <AxisSelect label="Value Column" value={cfg.value_key} options={yOptions} onChange={(v) => patch({ value_key: v })} badge={colBadge} />
               </>
             )}
           </div>
