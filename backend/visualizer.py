@@ -823,14 +823,14 @@ class Visualizer:
             fig.add_annotation(
                 text=f'<b>{total_label}</b>',
                 x=0.5, y=0.52,
-                font=dict(size=22, color='#1e293b', family='Inter, sans-serif'),
+                font=dict(size=22, color='#F2F2F0', family='Inter, sans-serif'),
                 showarrow=False,
                 xref='paper', yref='paper'
             )
             fig.add_annotation(
                 text='Total',
                 x=0.5, y=0.42,
-                font=dict(size=12, color='#475569', family='Inter, sans-serif'),
+                font=dict(size=12, color='#A8A8A3', family='Inter, sans-serif'),
                 showarrow=False,
                 xref='paper', yref='paper'
             )
