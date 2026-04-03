@@ -296,21 +296,21 @@ class AIAgent:
                 "x_key": "StageOrCategoryColumn",
                 "y_key": "IncrementalValueColumn",
                 "description": "One sentence about what cumulative effect this shows."
-            }}
+            }},
             {{
                 "type": "Sunburst Chart",
                 "title": "Descriptive chart title",
                 "path_cols": ["Region", "Category", "SubCategory"],
                 "value_key": "Revenue",
                 "description": "One sentence about the hierarchical composition this reveals."
-            }}
+            }},
             {{
                 "type": "Donut Chart",
                 "title": "Descriptive chart title",
                 "label_key": "ColumnName",
                 "value_key": "ColumnName",
                 "description": "One sentence about the composition this shows."
-            }}
+            }},
             {{
                 "type": "Knowledge Graph",
                 "title": "Entity Relationship Map",
