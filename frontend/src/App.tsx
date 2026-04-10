@@ -16,8 +16,15 @@ export type ChartConfig = {
   y_keys?: string[];
   label_key?: string;
   value_key?: string;
-  y_key?: string;
+  y_key?: string;          // AI agent returns this for singular-y charts — normalized to y_keys on upload
   tooltip_key?: string;
+  nbins?: number;
+  columns?: string[];
+  path_cols?: string[];
+  stage_col?: string;
+  size_key?: string;
+  color_col?: string;
+  color?: string;           // Editor palette hex — preserved across edit sessions
   isBlank?: boolean;
 };
 
@@ -58,6 +65,15 @@ function App() {
   };
 
   const handleUploadSuccess = (data: InsightData) => {
+    // Normalize y_key → y_keys for charts where AI agent returns singular y_key
+    // (Box Plot, Violin, Bubble, Waterfall). Without this, the ChartEditor
+    // would show an empty Y axis since EditorConfig only reads y_keys.
+    if (data.chart_configs) {
+      data.chart_configs = data.chart_configs.map(cfg => ({
+        ...cfg,
+        y_keys: cfg.y_keys?.length ? cfg.y_keys : (cfg.y_key ? [cfg.y_key] : undefined),
+      }));
+    }
     setInsightData(data);
     setChartRequest(null);
     setActiveView('dashboard');
@@ -69,6 +85,7 @@ function App() {
 
   const rowCount = insightData?.original_data?.length ?? 0;
   const colCount = insightData?.column_meta ? Object.keys(insightData.column_meta).length : 0;
+  const chartCount = insightData?.chart_configs?.length ?? 0;
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg-canvas)', color: 'var(--text-primary)', fontFamily: 'var(--font-body)' }}>
@@ -94,7 +111,7 @@ function App() {
           {insightData ? (
             <span className="px-3 py-1 rounded-lg text-xs"
                   style={{ fontFamily: 'var(--font-mono)', background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
-              {insightData.filename} · {rowCount.toLocaleString()} rows · {colCount} cols
+              {insightData.filename} · {rowCount.toLocaleString()} rows · {colCount} cols · {chartCount} charts
             </span>
           ) : (
             <span className="text-xs" style={{ color: 'var(--text-muted)' }}>No file loaded</span>

@@ -6,7 +6,8 @@ import {
 } from 'recharts';
 import {
     Activity, PieChart as PieChartIcon, BarChart2, TrendingUp,
-    Map as MapIcon, Network, Loader2, Plus, Info, Pencil, Download
+    Map as MapIcon, Network, Loader2, Plus, Info, Pencil, Download,
+    LayoutGrid, Filter, CircleDot, TrendingDown, Box, Layers
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
@@ -245,8 +246,16 @@ export default function Dashboard({ data, externalChartRequest }: DashboardProps
         const type = chartTypeName.toLowerCase();
         if (type.includes('bar')) return { type: chartTypeName, title: chartTypeName, x_key: categoricalCols[0] || keys[0], y_keys: numericCols.slice(0, 3) };
         if (type.includes('line') || type.includes('area') || type.includes('trend')) return { type: chartTypeName, title: chartTypeName, x_key: categoricalCols[0] || keys[0], y_keys: numericCols.slice(0, 3) };
+        if (type.includes('donut')) return { type: chartTypeName, title: chartTypeName, label_key: categoricalCols[0] || keys[0], value_key: numericCols[0] || keys[1] };
         if (type.includes('pie')) return { type: chartTypeName, title: chartTypeName, label_key: categoricalCols[0] || keys[0], value_key: numericCols[0] || keys[1] };
-        if (type.includes('scatter') || type.includes('plot')) return { type: chartTypeName, title: chartTypeName, x_key: numericCols[0] || keys[0], y_key: numericCols[1] || numericCols[0] || keys[1], tooltip_key: categoricalCols[0] };
+        if (type.includes('scatter')) return { type: chartTypeName, title: chartTypeName, x_key: numericCols[0] || keys[0], y_keys: [numericCols[1] || numericCols[0] || keys[1]], tooltip_key: categoricalCols[0] };
+        if (type.includes('bubble')) return { type: chartTypeName, title: chartTypeName, x_key: numericCols[0] || keys[0], y_keys: [numericCols[1] || numericCols[0]], size_key: numericCols[2] || numericCols[0] };
+        if (type.includes('histogram')) return { type: chartTypeName, title: chartTypeName, x_key: numericCols[0] || keys[0] };
+        if (type.includes('heatmap')) return { type: chartTypeName, title: chartTypeName, columns: numericCols.slice(0, 10) };
+        if (type.includes('box') || type.includes('violin')) return { type: chartTypeName, title: chartTypeName, x_key: categoricalCols[0] || keys[0], y_keys: [numericCols[0]] };
+        if (type.includes('waterfall')) return { type: chartTypeName, title: chartTypeName, x_key: categoricalCols[0] || keys[0], y_keys: [numericCols[0]] };
+        if (type.includes('treemap') || type.includes('sunburst')) return { type: chartTypeName, title: chartTypeName, path_cols: categoricalCols.slice(0, 2), value_key: numericCols[0] };
+        if (type.includes('funnel')) return { type: chartTypeName, title: chartTypeName, stage_col: categoricalCols[0] || keys[0], value_key: numericCols[0] };
         return { type: chartTypeName, title: chartTypeName };
     };
 
@@ -287,10 +296,18 @@ export default function Dashboard({ data, externalChartRequest }: DashboardProps
 
     const getIcon = (type: string, size = 14) => {
         const t = type.toLowerCase();
-        if (t.includes('pie')) return <PieChartIcon size={size} />;
+        if (t.includes('pie') || t.includes('donut')) return <PieChartIcon size={size} />;
         if (t.includes('bar')) return <BarChart2 size={size} />;
         if (t.includes('line') || t.includes('trend') || t.includes('area')) return <TrendingUp size={size} />;
-        if (t.includes('scatter') || t.includes('plot')) return <Activity size={size} />;
+        if (t.includes('scatter')) return <Activity size={size} />;
+        if (t.includes('histogram')) return <Layers size={size} />;
+        if (t.includes('box')) return <Box size={size} />;
+        if (t.includes('violin')) return <Activity size={size} />;
+        if (t.includes('heatmap')) return <Layers size={size} />;
+        if (t.includes('treemap') || t.includes('sunburst')) return <LayoutGrid size={size} />;
+        if (t.includes('funnel')) return <Filter size={size} />;
+        if (t.includes('bubble')) return <CircleDot size={size} />;
+        if (t.includes('waterfall')) return <TrendingDown size={size} />;
         if (t.includes('map') || t.includes('geo')) return <MapIcon size={size} />;
         if (t.includes('graph') || t.includes('network') || t.includes('knowledge')) return <Network size={size} />;
         return <Activity size={size} />;
@@ -383,7 +400,7 @@ export default function Dashboard({ data, externalChartRequest }: DashboardProps
         }
 
         if (type.includes('scatter') || type.includes('plot')) {
-            const xKey = cfg.x_key; const yKey = cfg.y_key || cfg.y_keys?.[0];
+            const xKey = cfg.x_key; const yKey = cfg.y_keys?.[0];
             if (!xKey || !yKey) return <NoColumnWarning />;
             return (
                 <ResponsiveContainer width="100%" height={360}>

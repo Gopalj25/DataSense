@@ -13,6 +13,7 @@ import {
   Plus,
   Trash2,
   Pencil,
+  LayoutGrid, Filter, CircleDot, TrendingDown
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
@@ -28,6 +29,10 @@ export interface EditorConfig {
   tooltip_key?: string;
   nbins?: number;
   columns?: string[];
+  path_cols?: string[];    // Treemap, Sunburst
+  stage_col?: string;      // Funnel
+  size_key?: string;       // Bubble
+  color_col?: string;      // Bubble grouping
   color?: string;
 }
 
@@ -50,6 +55,13 @@ const CHART_TYPES = [
   { id: "Histogram", icon: Layers, label: "Hist" },
   { id: "Box Plot", icon: Box, label: "Box" },
   { id: "Heatmap", icon: Grid3x3, label: "Heat" },
+  { id: "Treemap", icon: LayoutGrid, label: "Tree" },
+  { id: "Funnel", icon: Filter, label: "Funnel" },
+  { id: "Violin Plot", icon: Activity, label: "Violin" },
+  { id: "Bubble Chart", icon: CircleDot, label: "Bubble" },
+  { id: "Waterfall Chart", icon: TrendingDown, label: "Water" },
+  { id: "Sunburst Chart", icon: LayoutGrid, label: "Sun" },
+  { id: "Donut Chart", icon: PieIcon, label: "Donut" },
 ];
 
 const COLOUR_SWATCHES = [
@@ -82,6 +94,7 @@ export function autoSuggestAxes(
         y_keys: numericCols.slice(0, 1),
       };
     case "Pie Chart":
+    case "Donut Chart":
       return {
         label_key: categoricalCols[0] ?? allCols[0],
         value_key: numericCols[0],
@@ -94,12 +107,31 @@ export function autoSuggestAxes(
     case "Histogram":
       return { x_key: numericCols[0] };
     case "Box Plot":
+    case "Violin Plot":
+    case "Waterfall Chart":
       return {
         x_key: categoricalCols[0] ?? allCols[0],
         y_keys: [numericCols[0]],
       };
+    case "Bubble Chart":
+      return {
+        x_key: numericCols[0],
+        y_keys: [numericCols[1] ?? numericCols[0]],
+        size_key: numericCols[2] ?? numericCols[0],
+      };
     case "Heatmap":
       return { columns: numericCols.slice(0, 10) };
+    case "Treemap":
+    case "Sunburst Chart":
+      return {
+        path_cols: categoricalCols.slice(0, 2),
+        value_key: numericCols[0],
+      };
+    case "Funnel":
+      return {
+        stage_col: categoricalCols[0] ?? allCols[0],
+        value_key: numericCols[0],
+      };
     default:
       return {};
   }
@@ -110,24 +142,53 @@ export function validateConfig(
   columnMeta: ColumnMeta,
 ): string | null {
   const cols = Object.keys(columnMeta);
-  if (config.type === "Pie Chart") {
+  // ── Label + Value types (Pie / Donut) ──
+  if (config.type === "Pie Chart" || config.type === "Donut Chart") {
     if (!config.label_key || !cols.includes(config.label_key))
       return "Select a label column.";
     if (!config.value_key || !cols.includes(config.value_key))
       return "Select a value column.";
     return null;
   }
+  // ── Heatmap — columns auto-selected ──
   if (config.type === "Heatmap") return null;
+  // ── Treemap / Sunburst — path_cols + value_key ──
+  if (config.type === "Treemap" || config.type === "Sunburst Chart") {
+    if (!config.path_cols?.length) return "Select at least one path column.";
+    if (!config.value_key || !cols.includes(config.value_key))
+      return "Select a value column.";
+    return null;
+  }
+  // ── Funnel — stage_col + value_key ──
+  if (config.type === "Funnel") {
+    if (!config.stage_col || !cols.includes(config.stage_col))
+      return "Select a stage column.";
+    if (!config.value_key || !cols.includes(config.value_key))
+      return "Select a value column.";
+    return null;
+  }
+  // ── Bubble — x + y + size ──
+  if (config.type === "Bubble Chart") {
+    if (!config.x_key || !cols.includes(config.x_key))
+      return "Select an X axis column.";
+    if (!config.y_keys?.length || !cols.includes(config.y_keys[0]))
+      return "Select a Y axis column.";
+    if (!config.size_key || !cols.includes(config.size_key))
+      return "Select a size column.";
+    return null;
+  }
+  // ── X + Y types (Bar, Line, Scatter, Box, Violin, Waterfall) ──
   if (!config.x_key || !cols.includes(config.x_key))
     return "Select a valid X axis column.";
   if (
-    ["Bar Chart", "Line Chart", "Scatter Plot", "Box Plot"].includes(
+    ["Bar Chart", "Line Chart", "Scatter Plot", "Box Plot", "Violin Plot", "Waterfall Chart"].includes(
       config.type,
     )
   ) {
     if (!config.y_keys?.length || !cols.includes(config.y_keys[0]))
       return "Select at least one Y axis column.";
   }
+  // ── Histogram — numeric only ──
   if (config.type === "Histogram") {
     if (!config.x_key || columnMeta[config.x_key]?.type !== "numeric")
       return "Histogram requires a numeric column.";
@@ -257,11 +318,7 @@ function ColourPicker({
             key={hex}
             onClick={() => onChange(hex)}
             className={`w-7 h-7 rounded-full transition-all ${value === hex ? "ring-2 ring-offset-2 scale-110" : "hover:scale-110"}`}
-            style={{
-              backgroundColor: hex,
-              ringColor: "var(--accent)",
-              ringOffsetColor: "var(--bg-surface)",
-            }}
+            style={{ backgroundColor: hex }}
             title={hex}
           />
         ))}
@@ -302,7 +359,7 @@ export default function ChartEditor({
   const categoricalColumns = allColumns.filter(
     (k) => columnMeta[k].type !== "numeric",
   );
-  const xOptions = ["Scatter Plot", "Histogram"].includes(cfg.type)
+  const xOptions = ["Scatter Plot", "Histogram", "Bubble Chart"].includes(cfg.type)
     ? numericColumns
     : allColumns;
   const yOptions = numericColumns;
@@ -356,6 +413,10 @@ export default function ChartEditor({
         tooltip_key: cfg.tooltip_key,
         nbins: cfg.nbins,
         columns: cfg.columns,
+        path_cols: cfg.path_cols,
+        stage_col: cfg.stage_col,
+        size_key: cfg.size_key,
+        color_col: cfg.color_col,
         color: cfg.color,
       });
       onApply(res.data.plotly_json, cfg);
@@ -382,6 +443,12 @@ export default function ChartEditor({
         label_key: aiConfig.label_key,
         value_key: aiConfig.value_key,
         tooltip_key: aiConfig.tooltip_key,
+        nbins: aiConfig.nbins,
+        columns: aiConfig.columns,
+        path_cols: aiConfig.path_cols,
+        stage_col: aiConfig.stage_col,
+        size_key: aiConfig.size_key,
+        color_col: aiConfig.color_col,
       });
       onApply(res.data.plotly_json, aiConfig);
     } catch {
@@ -392,13 +459,31 @@ export default function ChartEditor({
   };
 
   const showXY = [
-    "Bar Chart",
-    "Line Chart",
-    "Scatter Plot",
-    "Box Plot",
+    "Bar Chart", "Line Chart", "Scatter Plot",
+    "Box Plot", "Violin Plot", "Waterfall Chart",
   ].includes(cfg.type);
-  const showPie = cfg.type === "Pie Chart";
+  const showPie = ["Pie Chart", "Donut Chart"].includes(cfg.type);
   const showHist = cfg.type === "Histogram";
+  const showBubble = cfg.type === "Bubble Chart";
+  const showPath = ["Treemap", "Sunburst Chart"].includes(cfg.type);
+  const showFunnel = cfg.type === "Funnel";
+  const showHeatmap = cfg.type === "Heatmap";
+
+  const toggleHeatmapCol = (col: string) => {
+    const current = cfg.columns || numericColumns;
+    const next = current.includes(col)
+      ? current.filter((c) => c !== col)
+      : [...current, col];
+    patch({ columns: next.length > 0 ? next : current });
+  };
+
+  const togglePathCol = (col: string) => {
+    const current = cfg.path_cols || [];
+    const next = current.includes(col)
+      ? current.filter((c) => c !== col)
+      : [...current, col];
+    patch({ path_cols: next });
+  };
 
   return (
     <motion.div
@@ -595,6 +680,140 @@ export default function ChartEditor({
                   />
                 </div>
               </>
+            )}
+            {showBubble && (
+              <>
+                <AxisSelect
+                  label="X Axis (numeric)"
+                  value={cfg.x_key}
+                  options={numericColumns}
+                  onChange={(v) => patch({ x_key: v })}
+                  badge={colBadge}
+                />
+                <AxisSelect
+                  label="Y Axis (numeric)"
+                  value={cfg.y_keys?.[0]}
+                  options={numericColumns}
+                  onChange={(v) => patch({ y_keys: [v] })}
+                  badge={colBadge}
+                />
+                <AxisSelect
+                  label="Size Column (numeric)"
+                  value={cfg.size_key}
+                  options={numericColumns}
+                  onChange={(v) => patch({ size_key: v })}
+                  badge={colBadge}
+                />
+                <AxisSelect
+                  label="Color Group (optional)"
+                  value={cfg.color_col ?? ""}
+                  options={["— none —", ...categoricalColumns]}
+                  onChange={(v) => patch({ color_col: v === "— none —" ? undefined : v })}
+                  badge={colBadge}
+                />
+              </>
+            )}
+            {showPath && (
+              <>
+                <div>
+                  <p
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      letterSpacing: "0.08em",
+                      textTransform: "uppercase",
+                      color: "var(--text-muted)",
+                      marginBottom: 6,
+                    }}
+                  >
+                    Hierarchy Path (toggle columns)
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {(categoricalColumns.length ? categoricalColumns : allColumns).map((col) => {
+                      const active = (cfg.path_cols || []).includes(col);
+                      return (
+                        <button
+                          key={col}
+                          onClick={() => togglePathCol(col)}
+                          className="px-2 py-1 rounded text-xs transition-all"
+                          style={{
+                            background: active ? "var(--accent)" : "var(--bg-overlay)",
+                            color: active ? "white" : "var(--text-secondary)",
+                            border: "none",
+                          }}
+                        >
+                          {col}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {(cfg.path_cols || []).length > 0 && (
+                    <p style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 4 }}>
+                      Order: {(cfg.path_cols || []).join(" \u2192 ")}
+                    </p>
+                  )}
+                </div>
+                <AxisSelect
+                  label="Value Column (size)"
+                  value={cfg.value_key}
+                  options={yOptions}
+                  onChange={(v) => patch({ value_key: v })}
+                  badge={colBadge}
+                />
+              </>
+            )}
+            {showFunnel && (
+              <>
+                <AxisSelect
+                  label="Stage Column"
+                  value={cfg.stage_col}
+                  options={categoricalColumns.length ? categoricalColumns : allColumns}
+                  onChange={(v) => patch({ stage_col: v })}
+                  badge={colBadge}
+                />
+                <AxisSelect
+                  label="Value Column"
+                  value={cfg.value_key}
+                  options={yOptions}
+                  onChange={(v) => patch({ value_key: v })}
+                  badge={colBadge}
+                />
+              </>
+            )}
+            {showHeatmap && (
+              <div>
+                <p
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    color: "var(--text-muted)",
+                    marginBottom: 6,
+                  }}
+                >
+                  Numeric Columns (toggle)
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {numericColumns.map((col) => {
+                    const active = (cfg.columns ?? numericColumns).includes(col);
+                    return (
+                      <button
+                        key={col}
+                        onClick={() => toggleHeatmapCol(col)}
+                        className="px-2 py-1 rounded text-xs transition-all"
+                        style={{
+                          background: active ? "var(--accent)" : "var(--bg-overlay)",
+                          color: active ? "white" : "var(--text-secondary)",
+                          border: "none",
+                        }}
+                      >
+                        {col}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             )}
           </div>
         </div>
