@@ -353,7 +353,7 @@ def _process_chat_response(response_text: str, request: ChatRequest) -> dict:
                 elif chart_type == "Histogram":
                     fig_json = Visualizer.generate_histogram(df, config.get("title", ""), config.get("x_key"), config.get("nbins", 30))
                 elif chart_type == "Box Plot":
-                    fig_json = Visualizer.generate_box_plot(df, config.get("title", ""), config.get("x_key"), config.get("y_keys", []))
+                    fig_json = Visualizer.generate_box_plot(df, config.get("title", ""), config.get("x_key"), config.get("y_key"))
                 elif chart_type == "Heatmap":
                     fig_json = Visualizer.generate_heatmap(df, config.get("title", ""), config.get("columns"))
                 elif chart_type == "Treemap":
@@ -463,10 +463,11 @@ class RenderRequest(BaseModel):
     tooltip_key: Optional[str] = None
     nbins:       Optional[int] = 30
     columns:     Optional[List[str]] = None
-    color:       Optional[str] = None
-    path_cols:  Optional[List[str]] = None # For treemap/sunburst
-    stage_col: Optional[str] = None # For funnel stages
-    size_key:    Optional[str] = None # For bubble chart
+    color:       Optional[str] = None       # Palette theming hex
+    color_col:   Optional[str] = None       # Categorical column for bubble grouping
+    path_cols:   Optional[List[str]] = None # For treemap/sunburst
+    stage_col:   Optional[str] = None       # For funnel stages
+    size_key:    Optional[str] = None       # For bubble chart
 
 
 @app.post("/api/render")
@@ -480,20 +481,20 @@ def render_chart(req: RenderRequest):
         _patch_palette(req.color)
 
     CHART_DISPATCH = {
-        "Bar Chart":    lambda: Visualizer.generate_bar_chart(df, req.title, req.x_key, req.y_keys or []),
-        "Line Chart":   lambda: Visualizer.generate_line_chart(df, req.title, req.x_key, req.y_keys or []),
-        "Pie Chart":    lambda: Visualizer.generate_pie_chart(df, req.title, req.label_key, req.value_key),
-        "Scatter Plot": lambda: Visualizer.generate_scatter_plot(df, req.title, req.x_key, (req.y_keys[0] if req.y_keys else None), req.tooltip_key),
-        "Histogram":    lambda: Visualizer.generate_histogram(df, req.title, req.x_key, req.nbins or 30),
-        "Box Plot":     lambda: Visualizer.generate_box_plot(df, req.title, req.x_key, (req.y_keys[0] if req.y_keys else None)),
-        "Heatmap":      lambda: Visualizer.generate_heatmap(df, req.title, req.columns),
-        "Treemap":      lambda: Visualizer.generate_treemap(df, req.title, req.path_cols or [], req.value_key or ""),
-        "Funnel":       lambda: Visualizer.generate_funnel(df, req.title, req.stage_col, req.value_key),
-        "Violin Plot":  lambda: Visualizer.generate_violin(df, req.title, req.x_key, (req.y_keys[0] if req.y_keys else None)),
-        "Bubble Chart": lambda: Visualizer.generate_bubble_chart(df, req.title, req.x_key, (req.y_keys[0] if req.y_keys else None), req.size_key, req.color),
+        "Bar Chart":       lambda: Visualizer.generate_bar_chart(df, req.title, req.x_key, req.y_keys or []),
+        "Line Chart":      lambda: Visualizer.generate_line_chart(df, req.title, req.x_key, req.y_keys or []),
+        "Pie Chart":       lambda: Visualizer.generate_pie_chart(df, req.title, req.label_key, req.value_key),
+        "Scatter Plot":    lambda: Visualizer.generate_scatter_plot(df, req.title, req.x_key, (req.y_keys[0] if req.y_keys else None), req.tooltip_key),
+        "Histogram":       lambda: Visualizer.generate_histogram(df, req.title, req.x_key, req.nbins or 30),
+        "Box Plot":        lambda: Visualizer.generate_box_plot(df, req.title, req.x_key, (req.y_keys[0] if req.y_keys else None)),
+        "Heatmap":         lambda: Visualizer.generate_heatmap(df, req.title, req.columns),
+        "Treemap":         lambda: Visualizer.generate_treemap(df, req.title, req.path_cols or [], req.value_key or ""),
+        "Funnel":          lambda: Visualizer.generate_funnel(df, req.title, req.stage_col, req.value_key),
+        "Violin Plot":     lambda: Visualizer.generate_violin(df, req.title, req.x_key, (req.y_keys[0] if req.y_keys else None)),
+        "Bubble Chart":    lambda: Visualizer.generate_bubble_chart(df, req.title, req.x_key, (req.y_keys[0] if req.y_keys else None), req.size_key, req.color_col),
         "Waterfall Chart": lambda: Visualizer.generate_waterfall_chart(df, req.title, req.x_key, (req.y_keys[0] if req.y_keys else None)),
-        "Sunburst Chart": lambda: Visualizer.generate_sunburst(df, req.title, req.path_cols or [], req.value_key or ""),
-        "Donut Chart": lambda: Visualizer.generate_donut(df, req.title, req.label_key, req.value_key)
+        "Sunburst Chart":  lambda: Visualizer.generate_sunburst(df, req.title, req.path_cols or [], req.value_key or ""),
+        "Donut Chart":     lambda: Visualizer.generate_donut(df, req.title, req.label_key, req.value_key),
     }
 
     handler = CHART_DISPATCH.get(req.chart_type)

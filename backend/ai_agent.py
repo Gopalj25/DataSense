@@ -234,11 +234,26 @@ class AIAgent:
                 "description": "One sentence about what this shows."
             }},
             {{
+                "type": "Line Chart",
+                "title": "Descriptive chart title",
+                "x_key": "DateOrOrderedColumn",
+                "y_keys": ["MetricA", "MetricB"],
+                "description": "One sentence about the trend this shows."
+            }},
+            {{
                 "type": "Pie Chart",
                 "title": "Descriptive chart title",
                 "label_key": "ColumnName",
                 "value_key": "ColumnName",
                 "description": "One sentence."
+            }},
+            {{
+                "type": "Scatter Plot",
+                "title": "Descriptive chart title",
+                "x_key": "NumericColumnA",
+                "y_keys": ["NumericColumnB"],
+                "tooltip_key": "DimensionalColumn",
+                "description": "One sentence about the correlation this reveals."
             }},
             {{
                 "type": "Histogram",
@@ -287,7 +302,7 @@ class AIAgent:
                 "x_key": "ColumnName",
                 "y_key": "ColumnName",
                 "size_key": "NumericColumn",
-                "color_col": "CategoricalColumn (optional)",
+                "color_col": "CategoryColumn",
                 "description": "One sentence about the relationship between the three variables."
             }},
             {{
@@ -374,7 +389,7 @@ class AIAgent:
     # AGENT 3 — Conversational chat with data (Llama 3 via Ollama)
     # ─────────────────────────────────────────────────────────────
     @staticmethod
-    def chat_with_data(parsed_text: str, question: str, previous_history: list | None = None) -> str:
+    def chat_with_data(parsed_text: str, question: str, previous_history: list = None) -> str:
         """Answers questions about the uploaded data with optional chart triggers. Uses Llama 3."""
         history_text = "\n".join([
             f"User: {msg['user']}\nAgent: {msg['agent']}"
