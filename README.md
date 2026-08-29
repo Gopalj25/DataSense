@@ -1,6 +1,6 @@
 # DataSense: Hybrid Deterministic-Probabilistic Data Visualization Pipeline
 
-DataSense is an intelligent, multi-agent web application that transforms raw data files (CSV, JSON, XLSX, PDF) into interactive business dashboards and insights in minutes. By pioneering a **Hybrid Deterministic-Probabilistic Pipeline**, DataSense eliminates LLM math hallucinations: the AI translates your natural language into strict Pandas operations, which the Python backend executes mathematically perfectly on the *full* dataset, not just a sample.
+DataSense is an intelligent, multi-agent web application that transforms raw data files (CSV, JSON, XLSX, PDF) into interactive business dashboards and insights in minutes. By pioneering a **Hybrid[...]
 
 ## Table of Contents
 
@@ -26,7 +26,7 @@ DataSense uses a separated frontend/backend architecture with a dedicated AI pro
 ```mermaid
 graph TD
     %% Frontend Components
-    subgraph Frontend [React Application - Vite, Plotly, Force-Graph]
+    subgraph Frontend["React Application - Vite, Plotly, Force-Graph"]
         UI[User Interface]
         Uploader[File Upload Component]
         Dashboard[Dynamic Dashboard (13 Charts)]
@@ -38,7 +38,7 @@ graph TD
     end
 
     %% Backend Components
-    subgraph Backend [Python FastAPI Server]
+    subgraph Backend["Python FastAPI Server"]
         API[FastAPI Endpoints]
         Parser[Data Parser Module]
         AIAgent[AI Agent Pipeline]
@@ -53,17 +53,17 @@ graph TD
     External[Google Gemini API]
 
     %% Data Flow
-    Uploader -- "Upload File (CSV, PDF, etc.)" --> API
-    Parser -- "Cache Globally, Extract Schema" --> AIAgent
-    AIAgent -- "Analyze Schema" --> External
-    External -- "JSON Chart Configs" --> Dashboard
+    Uploader -->|Upload File (CSV, PDF, etc.)| API
+    Parser -->|Cache Globally, Extract Schema| AIAgent
+    AIAgent -->|Analyze Schema| External
+    External -->|JSON Chart Configs| Dashboard
 
-    ChatUI -- "User Query" --> API
-    API -- "Regex Viz Pre-check" --> AIAgent
-    AIAgent -- "Translate to Pandas JSON" --> External
-    External -- "Pandas JSON" --> PandasEngine
-    PandasEngine -- "Exact Mathematical Result" --> External
-    External -- "Narrated Answer" --> ChatUI
+    ChatUI -->|User Query| API
+    API -->|Regex Viz Pre-check| AIAgent
+    AIAgent -->|Translate to Pandas JSON| External
+    External -->|Pandas JSON| PandasEngine
+    PandasEngine -->|Exact Mathematical Result| External
+    External -->|Narrated Answer| ChatUI
 ```
 
 ### Flow Breakdown:
@@ -73,7 +73,7 @@ graph TD
 3. **AI Generation Phase**: Using the lightweight schema, Gemini suggests charts and maps exact column names to Plotly properties (`x_key`, `y_keys`, `path_cols`).
 4. **Chat-to-Data Pipeline**: 
    - A deterministic regex intercepts visualization queries ("plot", "chart") to emit `<CHART: Type>` tags.
-   - Non-visualization queries are routed to an AI query planner that outputs strict JSON pandas boundaries. The Python backend evaluates this on the *full* DataFrame ensuring 100% accurate aggregations.
+   - Non-visualization queries are routed to an AI query planner that outputs strict JSON pandas boundaries. The Python backend evaluates this on the *full* DataFrame ensuring 100% accurate aggregatio[...]
 5. **Dashboard Render**: The frontend intercepts `<CHART: Type>` tags from the chat stream and automatically switches to the Dashboard view, mounting fully interactive Plotly.js elements.
 
 ## Tech Stack
@@ -144,5 +144,5 @@ DataSense relies on complex multi-stage agent routing rather than raw generation
 
 1. **The Analyzer Agent**: Ingests the data schema and strictly outputs JSON containing `content_summary` and `insights`. Acts as a Data Scientist prioritizing actionable KPIs.
 2. **The Configuration Agent**: Takes suggested chart types and the schema, acting as a "Frontend Developer". It securely maps specific keys to 13 different Plotly structures without writing code.
-3. **The Chat Query Planner**: Instead of trying to guess answers from a 300-row sample, it translates queries into JSON Pandas commands. This allows DataSense to aggregate or filter over millions of cached rows locally with perfect deterministic math.
+3. **The Chat Query Planner**: Instead of trying to guess answers from a 300-row sample, it translates queries into JSON Pandas commands. This allows DataSense to aggregate or filter over millions of [...]
 4. **The Narration Agent**: Receives the perfect numeric output of the Pandas execution and formats it conversationally for the user.
