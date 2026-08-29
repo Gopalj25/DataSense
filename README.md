@@ -24,13 +24,13 @@ DataSense is an intelligent, multi-agent web application that transforms raw dat
 DataSense uses a separated frontend/backend architecture with a dedicated AI processing layer.
 
 ```mermaid
-graph TD
+flowchart TD
     %% Frontend Components
     subgraph Frontend["React Application - Vite, Plotly, Force-Graph"]
-        UI[User Interface]
-        Uploader[File Upload Component]
-        Dashboard[Dynamic Dashboard (13 Charts)]
-        ChatUI[Chat Interface Component]
+        UI["User Interface"]
+        Uploader["File Upload Component"]
+        Dashboard["Dynamic Dashboard (13 Charts)"]
+        ChatUI["Chat Interface Component"]
 
         UI --> Uploader
         UI --> Dashboard
@@ -39,10 +39,10 @@ graph TD
 
     %% Backend Components
     subgraph Backend["Python FastAPI Server"]
-        API[FastAPI Endpoints]
-        Parser[Data Parser Module]
-        AIAgent[AI Agent Pipeline]
-        PandasEngine[Pandas Executor]
+        API["FastAPI Endpoints"]
+        Parser["Data Parser Module"]
+        AIAgent["AI Agent Pipeline"]
+        PandasEngine["Pandas Executor"]
 
         API --> Parser
         API --> AIAgent
@@ -50,20 +50,20 @@ graph TD
     end
 
     %% External
-    External[Google Gemini API]
+    External["Google Gemini API"]
 
     %% Data Flow
-    Uploader -->|Upload File (CSV, PDF, etc.)| API
-    Parser -->|Cache Globally, Extract Schema| AIAgent
-    AIAgent -->|Analyze Schema| External
-    External -->|JSON Chart Configs| Dashboard
+    Uploader -->|"Upload File (CSV, PDF, etc.)"| API
+    Parser -->|"Cache Globally, Extract Schema"| AIAgent
+    AIAgent -->|"Analyze Schema"| External
+    External -->|"JSON Chart Configs"| Dashboard
 
-    ChatUI -->|User Query| API
-    API -->|Regex Viz Pre-check| AIAgent
-    AIAgent -->|Translate to Pandas JSON| External
-    External -->|Pandas JSON| PandasEngine
-    PandasEngine -->|Exact Mathematical Result| External
-    External -->|Narrated Answer| ChatUI
+    ChatUI -->|"User Query"| API
+    API -->|"Regex Viz Pre-check"| AIAgent
+    AIAgent -->|"Translate to Pandas JSON"| External
+    External -->|"Pandas JSON"| PandasEngine
+    PandasEngine -->|"Exact Mathematical Result"| External
+    External -->|"Narrated Answer"| ChatUI
 ```
 
 ### Flow Breakdown:
